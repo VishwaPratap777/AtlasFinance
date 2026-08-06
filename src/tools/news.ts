@@ -99,41 +99,49 @@ export function formatNewsItems(items: NewsItem[], maxItems = 5): string {
 // ─── Analyst ratings ──────────────────────────────────────────────────────────
 export async function getAnalystRatings(ticker: string): Promise<string> {
   const symbol = ticker.toUpperCase();
-  const { data } = await axios.get(`${BASE}/stock/recommendation`, {
-    params: { symbol },
-    headers: headers(),
-  });
+  try {
+    const { data } = await axios.get(`${BASE}/stock/recommendation`, {
+      params: { symbol },
+      headers: headers(),
+    });
 
-  if (!Array.isArray(data) || data.length === 0) {
-    return `No analyst ratings available for ${symbol}.`;
+    if (!Array.isArray(data) || data.length === 0) {
+      return `No analyst ratings available for ${symbol}.`;
+    }
+
+    const latest = data[0];
+    return (
+      `Analyst consensus for *${symbol}* (${latest.period}):\n` +
+      `- Strong Buy: ${latest.strongBuy}\n` +
+      `- Buy: ${latest.buy}\n` +
+      `- Hold: ${latest.hold}\n` +
+      `- Sell: ${latest.sell}\n` +
+      `- Strong Sell: ${latest.strongSell}`
+    );
+  } catch {
+    return `Analyst recommendations for ${symbol} are restricted on Finnhub free tier. Use company fundamentals or price history instead.`;
   }
-
-  const latest = data[0];
-  return (
-    `Analyst consensus for *${symbol}* (${latest.period}):\n` +
-    `- Strong Buy: ${latest.strongBuy}\n` +
-    `- Buy: ${latest.buy}\n` +
-    `- Hold: ${latest.hold}\n` +
-    `- Sell: ${latest.sell}\n` +
-    `- Strong Sell: ${latest.strongSell}`
-  );
 }
 
 // ─── Price target ─────────────────────────────────────────────────────────────
 export async function getPriceTarget(ticker: string): Promise<string> {
   const symbol = ticker.toUpperCase();
-  const { data } = await axios.get(`${BASE}/stock/price-target`, {
-    params: { symbol },
-    headers: headers(),
-  });
+  try {
+    const { data } = await axios.get(`${BASE}/stock/price-target`, {
+      params: { symbol },
+      headers: headers(),
+    });
 
-  if (!data || !data.targetMean) return `No price target data for ${symbol}.`;
+    if (!data || !data.targetMean) return `No price target data for ${symbol}.`;
 
-  return (
-    `Analyst price targets for *${symbol}*:\n` +
-    `- Mean: $${data.targetMean?.toFixed(2)}\n` +
-    `- High: $${data.targetHigh?.toFixed(2)}\n` +
-    `- Low: $${data.targetLow?.toFixed(2)}\n` +
-    `- Last updated: ${data.lastUpdated}`
-  );
+    return (
+      `Analyst price targets for *${symbol}*:\n` +
+      `- Mean: $${data.targetMean?.toFixed(2)}\n` +
+      `- High: $${data.targetHigh?.toFixed(2)}\n` +
+      `- Low: $${data.targetLow?.toFixed(2)}\n` +
+      `- Last updated: ${data.lastUpdated}`
+    );
+  } catch {
+    return `Price target data for ${symbol} is unavailable on free tier.`;
+  }
 }

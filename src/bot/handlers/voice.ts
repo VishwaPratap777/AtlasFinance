@@ -39,7 +39,9 @@ export async function handleVoice(ctx: Context): Promise<void> {
       return;
     }
 
-    // Show what was heard (helps user confirm)
+    // Show what was transcribed for clear UX feedback
+    await ctx.reply(`🎙️ _"${transcription.trim()}"_`, { parse_mode: 'Markdown' }).catch(() => {});
+
     // Process as a regular message
     await processMessage(ctx, transcription, 'voice');
   } catch (err) {
