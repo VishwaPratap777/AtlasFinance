@@ -73,29 +73,34 @@ export async function generateMorningBrief(telegramId: number): Promise<string |
 
   if (sections.length === 0) return null;
 
-  // Ask LLM to synthesize into a tight brief
+  // Ask LLM to synthesize into a tight brief — with strict relevance gate
   const rawData = sections.join('\n\n---\n\n');
   const messages = [
     {
       role: 'system' as const,
-      content: `You are Atlas, a financial assistant. Write a very concise morning brief (max 5 bullet points total) based on the data below. 
-- Only include what's genuinely noteworthy — skip filler 
-- For each item, explain WHY it matters, not just what happened
-- Use Telegram Markdown (*bold* for tickers, no tables)
-- End with one key thing to watch today`,
+      content: `You are Atlas — a senior sell-side analyst. Synthesize a micro morning brief (max 3-4 bullet points) based strictly on the user's profile and raw data provided.
+
+STRICT RELEVANCE & SILENCE RULE:
+- Only surface items that directly impact the user's watchlist tickers or specific sectors.
+- For each item, explain WHY it matters to their holdings/sectors.
+- IF THERE IS NO MATERIAL NEWS OR SIGNIFICANT MOVEMENT (>2% price move or major catalyst) for the user's watchlist or sectors, REPLY WITH EXACTLY ONE WORD: "NO_NEWS". Do not send filler summaries.`,
     },
     {
       role: 'user' as const,
-      content: `User's profile: Role: ${profile.role || 'investor'}, Sectors: ${profile.sectors.join(', ') || 'general'}\n\nData:\n${rawData}\n\nWrite the morning brief.`,
+      content: `User's profile: Role: ${profile.role || 'investor'}, Watchlist: ${tickers.join(', ') || 'none'}, Sectors: ${profile.sectors.join(', ') || 'general'}\n\nData:\n${rawData}\n\nSynthesize the brief or output NO_NEWS.`,
     },
   ];
 
   try {
     const response = await chat(messages);
-    return response.content;
+    const text = response.content.trim();
+    if (text.toUpperCase().includes('NO_NEWS') || text.length < 15) {
+      console.log(`[Scheduler] No material news for user ${telegramId} today — sending nothing.`);
+      return null; // Silence is preferred!
+    }
+    return text;
   } catch {
-    // Fallback: return raw data if LLM fails
-    return sections.join('\n\n');
+    return null; // Don't send raw dumps if synthesis fails
   }
 }
 
