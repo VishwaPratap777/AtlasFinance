@@ -16,8 +16,9 @@ const envSchema = z.object({
   FINNHUB_API_KEY: z.string().optional().default(''),
   ALPHA_VANTAGE_API_KEY: z.string().optional().default(''),
 
-  // Database
+  // Database & Cache
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+  REDIS_URL: z.string().optional().default(''),
 
   // Google OAuth (optional)
   GOOGLE_CLIENT_ID: z.string().optional().default(''),

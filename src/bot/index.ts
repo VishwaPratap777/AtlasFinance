@@ -9,6 +9,8 @@ import { UserProfile } from '../models/UserProfile';
 import { Conversation } from '../models/Conversation';
 import { DocumentChunk } from '../models/DocumentChunk';
 
+import { clearRedisHistory } from '../config/redis';
+
 export function createBot(): Telegraf {
   const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
 
@@ -20,6 +22,7 @@ export function createBot(): Telegraf {
     await UserProfile.deleteOne({ telegramId });
     await Conversation.deleteOne({ telegramId });
     await DocumentChunk.deleteMany({ telegramId });
+    await clearRedisHistory(telegramId);
 
     await ctx.reply(
       "🔄 *Profile & History Reset*\n\nYour profile, watchlist, portfolio, and conversation history have been cleared to zero.\n\nSend any text message to start fresh!",

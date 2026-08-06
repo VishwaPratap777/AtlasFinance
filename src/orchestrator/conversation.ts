@@ -75,36 +75,55 @@ export async function getConversation(telegramId: number): Promise<import('../mo
   return conv;
 }
 
-// ─── Build LLM message array from DB history ───────────────────────────────────
+import { getRedisHistory, setRedisHistory, ChatMessageCache } from '../config/redis';
+
+// ─── Build LLM message array from history (Redis Hot Memory -> MongoDB Fallback) ──
 export async function buildMessageHistory(
   telegramId: number,
   newUserMessage: string,
   profile: IUserProfile | null
 ): Promise<ChatMessage[]> {
-  const conv = await getConversation(telegramId);
-
   const systemPrompt = buildSystemPrompt(profile);
   const systemMessage: ChatMessage = { role: 'system', content: systemPrompt };
 
-  // Take last N messages from history
-  const recentMessages = conv.messages
-    .filter((m: IMessage) => m.role !== 'system')
-    .slice(-MAX_HISTORY)
-    .map(
-      (m: IMessage): ChatMessage => ({
+  let recentMessages: ChatMessage[] = [];
+
+  // Try reading hot memory from Redis first (<1ms read)
+  const cached = await getRedisHistory(telegramId);
+  if (cached && cached.length > 0) {
+    recentMessages = cached.map(
+      (m: ChatMessageCache): ChatMessage => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       })
     );
+    console.log(`[Conversation/Redis] ⚡ Hot memory HIT: ${recentMessages.length} messages for Telegram ID ${telegramId}`);
+  } else {
+    // Redis miss or disabled -> query MongoDB Atlas
+    const conv = await getConversation(telegramId);
+    recentMessages = conv.messages
+      .filter((m: IMessage) => m.role !== 'system')
+      .slice(-MAX_HISTORY)
+      .map(
+        (m: IMessage): ChatMessage => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })
+      );
+    console.log(`[Conversation/MongoDB] Loaded ${recentMessages.length} messages from DB for Telegram ID ${telegramId}`);
 
-  console.log(`[Conversation] Loaded ${recentMessages.length} prior messages from history for Telegram ID ${telegramId}`);
+    // Warm up Redis cache
+    if (recentMessages.length > 0) {
+      await setRedisHistory(telegramId, recentMessages);
+    }
+  }
 
   const userMessage: ChatMessage = { role: 'user', content: newUserMessage };
 
   return [systemMessage, ...recentMessages, userMessage];
 }
 
-// ─── Persist a message pair to DB ──────────────────────────────────────────────
+// ─── Persist a message pair to DB & Redis Hot Memory ──────────────────────────
 export async function persistMessages(
   telegramId: number,
   userContent: string,
@@ -143,7 +162,18 @@ export async function persistMessages(
 
   conv.markModified('messages');
   await conv.save();
-  console.log(`[Conversation] Persisted message turn (Total in DB: ${conv.messages.length})`);
+
+  // Update Redis Hot Memory
+  const updatedRecent = conv.messages
+    .filter((m: IMessage) => m.role !== 'system')
+    .slice(-MAX_HISTORY)
+    .map((m: IMessage) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+  await setRedisHistory(telegramId, updatedRecent);
+
+  console.log(`[Conversation] Persisted message turn to MongoDB & Redis (Total in DB: ${conv.messages.length})`);
 }
 
 // ─── Update user profile from conversation insights ───────────────────────────
