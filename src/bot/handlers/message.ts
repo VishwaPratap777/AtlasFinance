@@ -16,11 +16,16 @@ function escapeMarkdown(text: string): string {
 
 // ─── Format response for Telegram ─────────────────────────────────────────────
 function formatForTelegram(text: string): string {
-  // Trim excessive whitespace
   return text
+    .replace(/<function[^>]*>[\s\S]*?<\/function>/gi, '')
+    .replace(/<function[^>]*>/gi, '')
+    .replace(/<\/function>/gi, '')
+    .replace(/<tool_call[^>]*>[\s\S]*?<\/tool_call>/gi, '')
+    .replace(/<tool_call[^>]*>/gi, '')
+    .replace(/<\/tool_call>/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-    .substring(0, 4096); // Telegram message limit
+    .substring(0, 4096);
 }
 
 // ─── Core process message ─────────────────────────────────────────────────────

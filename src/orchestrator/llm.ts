@@ -73,8 +73,18 @@ async function callGroq(
     args: JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>,
   }));
 
+  let content = choice.message.content || '';
+  content = content
+    .replace(/<function[^>]*>[\s\S]*?<\/function>/gi, '')
+    .replace(/<function[^>]*>/gi, '')
+    .replace(/<\/function>/gi, '')
+    .replace(/<tool_call[^>]*>[\s\S]*?<\/tool_call>/gi, '')
+    .replace(/<tool_call[^>]*>/gi, '')
+    .replace(/<\/tool_call>/gi, '')
+    .trim();
+
   return {
-    content: choice.message.content || '',
+    content,
     toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
     provider: 'groq',
   };
