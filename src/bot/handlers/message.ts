@@ -1,5 +1,5 @@
 import { Context } from 'telegraf';
-import { chat, ChatMessage } from '../../orchestrator/llm';
+import { chatStream, ChatMessage } from '../../orchestrator/llm';
 import { buildMessageHistory, persistMessages, getUserProfile, upsertUserProfile } from '../../orchestrator/conversation';
 import { TOOL_DEFINITIONS, executeTool } from '../../orchestrator/tools';
 import { buildRAGContext } from '../../rag/retriever';
@@ -70,15 +70,43 @@ export async function processMessage(
     const augmentedUserText = contextPrefix + userText;
     let messages = await buildMessageHistory(telegramId, augmentedUserText, profile);
 
-    // ─── Agentic tool-calling loop ─────────────────────────────────────────
+    // ─── Agentic tool-calling loop with Telegram Streaming ─────────────────
     let finalResponse = '';
     const allToolCalls: { name: string; args: Record<string, unknown>; result?: string }[] = [];
     let round = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let streamMessage: any = null;
+    let lastEditTime = 0;
 
     while (round < MAX_TOOL_ROUNDS) {
       round++;
 
-      const response = await chat(messages, TOOL_DEFINITIONS);
+      const response = await chatStream(
+        messages,
+        TOOL_DEFINITIONS,
+        async (chunkText: string) => {
+          const now = Date.now();
+          if (now - lastEditTime > 800 && chunkText.trim().length > 10) {
+            lastEditTime = now;
+            const formattedChunk = formatForTelegram(chunkText);
+            try {
+              if (!streamMessage) {
+                streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(() => null);
+              } else {
+                await ctx.telegram
+                  .editMessageText(
+                    ctx.chat?.id,
+                    streamMessage.message_id,
+                    undefined,
+                    formattedChunk,
+                    { parse_mode: 'Markdown' }
+                  )
+                  .catch(() => {});
+              }
+            } catch { /* ignore intermediate edit errors */ }
+          }
+        }
+      );
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
         // No more tool calls — this is the final answer
@@ -128,12 +156,30 @@ export async function processMessage(
 
     const formatted = formatForTelegram(finalResponse);
 
-    // Send with Markdown parse mode
-    try {
-      await ctx.reply(formatted, { parse_mode: 'Markdown' });
-    } catch {
-      // Fallback to plain text if Markdown fails
-      await ctx.reply(formatted.replace(/[*_`]/g, ''));
+    // Send or finalize Telegram message
+    if (streamMessage) {
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat?.id,
+          streamMessage.message_id,
+          undefined,
+          formatted,
+          { parse_mode: 'Markdown' }
+        );
+      } catch {
+        await ctx.telegram.editMessageText(
+          ctx.chat?.id,
+          streamMessage.message_id,
+          undefined,
+          formatted.replace(/[*_`]/g, '')
+        ).catch(() => {});
+      }
+    } else {
+      try {
+        await ctx.reply(formatted, { parse_mode: 'Markdown' });
+      } catch {
+        await ctx.reply(formatted.replace(/[*_`]/g, ''));
+      }
     }
 
     // Persist to DB

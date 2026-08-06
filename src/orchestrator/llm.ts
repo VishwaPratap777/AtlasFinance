@@ -147,6 +147,93 @@ async function callGemini(
   };
 }
 
+// ─── Groq Streaming Call ──────────────────────────────────────────────────────
+async function callGroqStream(
+  messages: ChatMessage[],
+  tools?: ToolDefinition[],
+  onChunk?: (text: string) => void,
+  model = 'llama-3.3-70b-versatile'
+): Promise<LLMResponse> {
+  const groqMessages = messages.map((m) => ({
+    role: m.role as 'user' | 'assistant' | 'system',
+    content: m.content,
+  }));
+
+  const params: Parameters<typeof groq.chat.completions.create>[0] = {
+    model,
+    messages: groqMessages,
+    temperature: 0.7,
+    max_tokens: 450,
+    stream: true,
+  };
+
+  if (tools && tools.length > 0) {
+    params.tools = tools.map((t) => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
+    params.tool_choice = 'auto';
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stream = (await groq.chat.completions.create(params as any)) as unknown as AsyncIterable<any>;
+
+  let fullContent = '';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const accumulatedToolCalls: Record<number, { name: string; argsStr: string }> = {};
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta;
+    if (!delta) continue;
+
+    if (delta.content) {
+      fullContent += delta.content;
+      if (onChunk) {
+        onChunk(fullContent);
+      }
+    }
+
+    if (delta.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        const index = tc.index ?? 0;
+        if (!accumulatedToolCalls[index]) {
+          accumulatedToolCalls[index] = { name: '', argsStr: '' };
+        }
+        if (tc.function?.name) {
+          accumulatedToolCalls[index].name += tc.function.name;
+        }
+        if (tc.function?.arguments) {
+          accumulatedToolCalls[index].argsStr += tc.function.arguments;
+        }
+      }
+    }
+  }
+
+  const toolCalls = Object.values(accumulatedToolCalls)
+    .filter((tc) => tc.name.length > 0)
+    .map((tc) => ({
+      name: tc.name,
+      args: JSON.parse(tc.argsStr || '{}') as Record<string, unknown>,
+    }));
+
+  let cleanedContent = fullContent
+    .replace(/<[a-zA-Z_0-9\-]+[^>]*>[\s\S]*?<\/[a-zA-Z_0-9\-]+>/gi, '')
+    .replace(/<[a-zA-Z_0-9\-]+[^>]*>/gi, '')
+    .replace(/<\/[a-zA-Z_0-9\-]+>/gi, '')
+    .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
+    .trim();
+
+  return {
+    content: cleanedContent,
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    provider: 'groq-stream',
+  };
+}
+
 // ─── Public interface with 4-stage resilience fallback ───────────────────────
 export async function chat(
   messages: ChatMessage[],
@@ -180,6 +267,20 @@ export async function chat(
         }
       }
     }
+  }
+}
+
+// ─── Public interface for Streaming responses ───────────────────────────────
+export async function chatStream(
+  messages: ChatMessage[],
+  tools?: ToolDefinition[],
+  onChunk?: (text: string) => void,
+  preferredModel?: string
+): Promise<LLMResponse> {
+  try {
+    return await callGroqStream(messages, tools, onChunk, preferredModel);
+  } catch {
+    return await chat(messages, tools, preferredModel);
   }
 }
 
