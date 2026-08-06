@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+*.tmp
+tmp/
+.DS_Store
+*.ogg
+*.mp3
+*.wav
+coverage/
