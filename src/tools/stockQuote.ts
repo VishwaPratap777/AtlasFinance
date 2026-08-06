@@ -20,27 +20,57 @@ export interface QuoteResult {
   timestamp: string;
 }
 
-export async function getQuote(ticker: string): Promise<QuoteResult> {
-  const symbol = ticker.toUpperCase();
-  const { data } = await axios.get(`${BASE}/quote`, {
-    params: { symbol },
-    headers: finnhubHeaders(),
-  });
+const KNOWN_CRYPTO = new Set([
+  'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
+  'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI'
+]);
 
-  if (!data || data.c === 0) {
-    throw new Error(`No quote data available for ${symbol}`);
+export async function getQuote(ticker: string): Promise<QuoteResult> {
+  let symbol = ticker.toUpperCase().trim();
+  
+  // Normalize crypto tickers (e.g. BTC -> BTC-USD)
+  if (KNOWN_CRYPTO.has(symbol)) {
+    symbol = `${symbol}-USD`;
   }
 
+  // Try Finnhub first (for equities/ETFs)
+  try {
+    const { data } = await axios.get(`${BASE}/quote`, {
+      params: { symbol },
+      headers: finnhubHeaders(),
+    });
+
+    if (data && data.c && data.c !== 0) {
+      return {
+        ticker: symbol,
+        price: data.c,
+        change: data.d,
+        changePercent: data.dp,
+        high: data.h,
+        low: data.l,
+        open: data.o,
+        previousClose: data.pc,
+        timestamp: new Date(data.t * 1000).toISOString(),
+      };
+    }
+  } catch {
+    // Fall through to Yahoo Finance
+  }
+
+  // Fallback to Yahoo Finance (supports crypto, international stocks, ETFs)
+  const { quickLookup } = await import('./yahooFinance');
+  const yahooData = await quickLookup(symbol);
+
   return {
-    ticker: symbol,
-    price: data.c,
-    change: data.d,
-    changePercent: data.dp,
-    high: data.h,
-    low: data.l,
-    open: data.o,
-    previousClose: data.pc,
-    timestamp: new Date(data.t * 1000).toISOString(),
+    ticker: yahooData.ticker,
+    price: yahooData.price,
+    change: (yahooData.price * (yahooData.changePercent || 0)) / 100,
+    changePercent: yahooData.changePercent,
+    high: yahooData.fiftyTwoWeekHigh || yahooData.price,
+    low: yahooData.fiftyTwoWeekLow || yahooData.price,
+    open: yahooData.price,
+    previousClose: yahooData.price / (1 + (yahooData.changePercent || 0) / 100),
+    timestamp: new Date().toISOString(),
   };
 }
 

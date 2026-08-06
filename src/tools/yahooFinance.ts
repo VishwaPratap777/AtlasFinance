@@ -14,8 +14,16 @@ export interface QuickSummary {
   description?: string;
 }
 
+const KNOWN_CRYPTO = new Set([
+  'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
+  'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI'
+]);
+
 export async function quickLookup(ticker: string): Promise<QuickSummary> {
-  const symbol = ticker.toUpperCase();
+  let symbol = ticker.toUpperCase().trim();
+  if (KNOWN_CRYPTO.has(symbol)) {
+    symbol = `${symbol}-USD`;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [quoteRes, detailRes, profileRes] = await Promise.allSettled<any>([
