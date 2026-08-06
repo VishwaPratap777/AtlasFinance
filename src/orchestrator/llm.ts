@@ -91,10 +91,25 @@ async function callGroq(
 }
 
 // ─── Fallback: Gemini ───────────────────────────────────────────────────────────
-async function callGemini(messages: ChatMessage[]): Promise<LLMResponse> {
+async function callGemini(
+  messages: ChatMessage[],
+  tools?: ToolDefinition[]
+): Promise<LLMResponse> {
   if (!gemini) throw new Error('Gemini API key not configured');
 
-  const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  // Convert tools to Gemini format
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const functionDeclarations = tools?.map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters as any,
+  }));
+
+  const model = gemini.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tools: functionDeclarations && functionDeclarations.length > 0 ? [{ functionDeclarations: functionDeclarations as any }] : undefined,
+  });
 
   // Convert to Gemini format — system prompt becomes the first user turn context
   const systemMsg = messages.find((m) => m.role === 'system');
@@ -110,11 +125,25 @@ async function callGemini(messages: ChatMessage[]): Promise<LLMResponse> {
     ? `Context: ${systemMsg.content}\n\n${lastMessage?.content || ''}`
     : lastMessage?.content || '';
 
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessage(userPrompt);
+  const chatSession = model.startChat({ history });
+  const result = await chatSession.sendMessage(userPrompt);
+
+  const functionCalls = result.response.functionCalls();
+  const toolCalls = functionCalls?.map((fc) => ({
+    name: fc.name,
+    args: (fc.args || {}) as Record<string, unknown>,
+  }));
+
+  let text = '';
+  try {
+    text = result.response.text();
+  } catch {
+    text = '';
+  }
 
   return {
-    content: result.response.text(),
+    content: text,
+    toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
     provider: 'gemini',
   };
 }
@@ -130,7 +159,7 @@ export async function chat(
   } catch (groqError) {
     console.warn('[LLM] Groq failed, falling back to Gemini:', (groqError as Error).message);
     try {
-      return await callGemini(messages);
+      return await callGemini(messages, tools);
     } catch (geminiError) {
       console.error('[LLM] Both providers failed:', (geminiError as Error).message);
       throw new Error('All AI providers are currently unavailable. Please try again in a moment.');

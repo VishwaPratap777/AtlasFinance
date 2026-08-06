@@ -2,7 +2,7 @@ import { Conversation, IMessage } from '../models/Conversation';
 import { UserProfile, IUserProfile } from '../models/UserProfile';
 import { ChatMessage } from './llm';
 
-const MAX_HISTORY = 40; // messages to send to LLM
+const MAX_HISTORY = 12; // messages to send to LLM per turn (6 message pairs)
 const MAX_STORED = 100; // messages to store in DB
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
