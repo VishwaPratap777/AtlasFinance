@@ -5,8 +5,27 @@ import { handleVoice } from './handlers/voice';
 import { handleDocument } from './handlers/document';
 import { initScheduler } from '../scheduler/jobs';
 
+import { UserProfile } from '../models/UserProfile';
+import { Conversation } from '../models/Conversation';
+import { DocumentChunk } from '../models/DocumentChunk';
+
 export function createBot(): Telegraf {
   const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
+
+  // ─── Reset Command (testing helper) ────────────────────────────────────────
+  bot.command('reset', async (ctx) => {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    await UserProfile.deleteOne({ telegramId });
+    await Conversation.deleteOne({ telegramId });
+    await DocumentChunk.deleteMany({ telegramId });
+
+    await ctx.reply(
+      "🔄 *Profile & History Reset*\n\nYour profile, watchlist, portfolio, and conversation history have been cleared to zero.\n\nSend any text message to start fresh!",
+      { parse_mode: 'Markdown' }
+    );
+  });
 
   // ─── Text messages ─────────────────────────────────────────────────────────
   bot.on('text', async (ctx) => {
