@@ -75,12 +75,10 @@ async function callGroq(
 
   let content = choice.message.content || '';
   content = content
-    .replace(/<function[^>]*>[\s\S]*?<\/function>/gi, '')
-    .replace(/<function[^>]*>/gi, '')
-    .replace(/<\/function>/gi, '')
-    .replace(/<tool_call[^>]*>[\s\S]*?<\/tool_call>/gi, '')
-    .replace(/<tool_call[^>]*>/gi, '')
-    .replace(/<\/tool_call>/gi, '')
+    .replace(/<[a-zA-Z_0-9\-]+[^>]*>[\s\S]*?<\/[a-zA-Z_0-9\-]+>/gi, '')
+    .replace(/<[a-zA-Z_0-9\-]+[^>]*>/gi, '')
+    .replace(/<\/[a-zA-Z_0-9\-]+>/gi, '')
+    .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
     .trim();
 
   return {

@@ -16,13 +16,12 @@ function escapeMarkdown(text: string): string {
 
 // ─── Format response for Telegram ─────────────────────────────────────────────
 function formatForTelegram(text: string): string {
+  if (!text) return '';
   return text
-    .replace(/<function[^>]*>[\s\S]*?<\/function>/gi, '')
-    .replace(/<function[^>]*>/gi, '')
-    .replace(/<\/function>/gi, '')
-    .replace(/<tool_call[^>]*>[\s\S]*?<\/tool_call>/gi, '')
-    .replace(/<tool_call[^>]*>/gi, '')
-    .replace(/<\/tool_call>/gi, '')
+    .replace(/<[a-zA-Z_0-9\-]+[^>]*>[\s\S]*?<\/[a-zA-Z_0-9\-]+>/gi, '')
+    .replace(/<[a-zA-Z_0-9\-]+[^>]*>/gi, '')
+    .replace(/<\/[a-zA-Z_0-9\-]+>/gi, '')
+    .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
     .substring(0, 4096);
