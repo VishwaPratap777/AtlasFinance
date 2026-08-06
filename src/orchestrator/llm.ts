@@ -30,7 +30,7 @@ export interface ToolDefinition {
 export interface LLMResponse {
   content: string;
   toolCalls?: { name: string; args: Record<string, unknown> }[];
-  provider: 'groq' | 'gemini';
+  provider: string;
 }
 
 // ─── Primary: Groq ──────────────────────────────────────────────────────────────
@@ -93,7 +93,8 @@ async function callGroq(
 // ─── Fallback: Gemini ───────────────────────────────────────────────────────────
 async function callGemini(
   messages: ChatMessage[],
-  tools?: ToolDefinition[]
+  tools?: ToolDefinition[],
+  modelName = 'gemini-1.5-flash'
 ): Promise<LLMResponse> {
   if (!gemini) throw new Error('Gemini API key not configured');
 
@@ -106,7 +107,7 @@ async function callGemini(
   }));
 
   const model = gemini.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: modelName,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tools: functionDeclarations && functionDeclarations.length > 0 ? [{ functionDeclarations: functionDeclarations as any }] : undefined,
   });
@@ -144,25 +145,42 @@ async function callGemini(
   return {
     content: text,
     toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
-    provider: 'gemini',
+    provider: `gemini (${modelName})`,
   };
 }
 
-// ─── Public interface with automatic fallback ───────────────────────────────────
+// ─── Public interface with 4-stage resilience fallback ───────────────────────
 export async function chat(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   preferredModel?: string
 ): Promise<LLMResponse> {
+  // Tier 1: Groq Primary 70B (llama-3.3-70b-versatile)
   try {
-    return await callGroq(messages, tools, preferredModel);
-  } catch (groqError) {
-    console.warn('[LLM] Groq failed, falling back to Gemini:', (groqError as Error).message);
+    return await callGroq(messages, tools, preferredModel || 'llama-3.3-70b-versatile');
+  } catch (groqError1) {
+    console.warn('[LLM] Groq 70B rate-limited, trying Groq 8B Instant (500k TPD quota):', (groqError1 as Error).message);
+    
+    // Tier 2: Groq High-Capacity Instant (llama-3.1-8b-instant — 500,000 tokens/day limit!)
     try {
-      return await callGemini(messages, tools);
-    } catch (geminiError) {
-      console.error('[LLM] Both providers failed:', (geminiError as Error).message);
-      throw new Error('All AI providers are currently unavailable. Please try again in a moment.');
+      return await callGroq(messages, tools, 'llama-3.1-8b-instant');
+    } catch (groqError2) {
+      console.warn('[LLM] Groq 8B failed, trying Gemini 1.5 Flash (1500 RPD quota):', (groqError2 as Error).message);
+      
+      // Tier 3: Gemini 1.5 Flash (1,500 requests/day free tier quota)
+      try {
+        return await callGemini(messages, tools, 'gemini-1.5-flash');
+      } catch (geminiError1) {
+        console.warn('[LLM] Gemini 1.5 Flash failed, trying Gemini 2.5 Flash:', (geminiError1 as Error).message);
+        
+        // Tier 4: Gemini 2.5 Flash
+        try {
+          return await callGemini(messages, tools, 'gemini-2.5-flash');
+        } catch (finalError) {
+          console.error('[LLM] All 4 provider models failed:', (finalError as Error).message);
+          throw new Error('All AI model quotas are currently exhausted. Please try again in a few minutes.');
+        }
+      }
     }
   }
 }
