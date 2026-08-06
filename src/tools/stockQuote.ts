@@ -25,12 +25,20 @@ const KNOWN_CRYPTO = new Set([
   'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI'
 ]);
 
+import { getCache, setCache } from '../config/redis';
+
 export async function getQuote(ticker: string): Promise<QuoteResult> {
   let symbol = ticker.toUpperCase().trim();
   
   // Normalize crypto tickers (e.g. BTC -> BTC-USD)
   if (KNOWN_CRYPTO.has(symbol)) {
     symbol = `${symbol}-USD`;
+  }
+
+  // Check 75s Redis quote cache
+  const cachedQuote = await getCache<QuoteResult>(`quote:${symbol}`);
+  if (cachedQuote) {
+    return cachedQuote;
   }
 
   // Try Finnhub first (for equities/ETFs)
@@ -41,7 +49,7 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     });
 
     if (data && data.c && data.c !== 0) {
-      return {
+      const res: QuoteResult = {
         ticker: symbol,
         price: data.c,
         change: data.d,
@@ -52,6 +60,8 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
         previousClose: data.pc,
         timestamp: new Date(data.t * 1000).toISOString(),
       };
+      await setCache(`quote:${symbol}`, res, 75);
+      return res;
     }
   } catch {
     // Fall through to Yahoo Finance
@@ -61,7 +71,7 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
   const { quickLookup } = await import('./yahooFinance');
   const yahooData = await quickLookup(symbol);
 
-  return {
+  const res: QuoteResult = {
     ticker: yahooData.ticker,
     price: yahooData.price,
     change: (yahooData.price * (yahooData.changePercent || 0)) / 100,
@@ -72,6 +82,8 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     previousClose: yahooData.price / (1 + (yahooData.changePercent || 0) / 100),
     timestamp: new Date().toISOString(),
   };
+  await setCache(`quote:${symbol}`, res, 75);
+  return res;
 }
 
 // Format quote for Telegram display

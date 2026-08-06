@@ -70,3 +70,24 @@ export async function clearRedisHistory(telegramId: number): Promise<void> {
     /* ignore */
   }
 }
+
+// ─── Generic 60-90s Response & API Quote Cache ──────────────────────────────
+export async function getCache<T>(key: string): Promise<T | null> {
+  if (!redis) return null;
+  try {
+    const raw = await redis.get(`atlas:cache:${key}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCache<T>(key: string, data: T, ttlSeconds = 75): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(`atlas:cache:${key}`, JSON.stringify(data), 'EX', ttlSeconds);
+  } catch {
+    /* ignore */
+  }
+}
