@@ -18,8 +18,20 @@ function buildSystemPrompt(profile: IUserProfile | null): string {
       : 'none set yet';
 
   const roleStr = profile?.role || 'not specified';
+  const now = new Date();
+  const currentDateStr = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const isoDateStr = now.toISOString().split('T')[0];
 
   return `You are Atlas — a sharp, discreet financial analyst assistant living inside Telegram. Talk naturally like a human sell-side analyst texting a trusted colleague or fund manager.
+
+## REAL-TIME DATE ANCHOR
+- **Today's Date**: ${currentDateStr} (${isoDateStr}).
+- Always ground all market queries, earnings, and news relative to today (${isoDateStr}). NEVER cite 2024 or past training dates as the current date.
 
 ## HUMAN PROFESSIONALISM & CONCISENESS
 - **BE HUMAN & NATURAL**: Write clean, professional prose. Avoid robotic AI headers, rigid boilerplate templates, or synthetic filler phrases (e.g. never say "As an AI..." or "Here is the requested information").
