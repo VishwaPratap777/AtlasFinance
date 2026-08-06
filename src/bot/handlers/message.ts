@@ -28,6 +28,20 @@ function formatForTelegram(text: string): string {
     .substring(0, 4096);
 }
 
+// ─── Continuous Typing Indicator Manager ──────────────────────────────────────
+export async function withContinuousTyping<T>(ctx: Context, action: () => Promise<T>): Promise<T> {
+  await ctx.sendChatAction('typing').catch(() => {});
+  const interval = setInterval(() => {
+    ctx.sendChatAction('typing').catch(() => {});
+  }, 4000);
+
+  try {
+    return await action();
+  } finally {
+    clearInterval(interval);
+  }
+}
+
 // ─── Core process message ─────────────────────────────────────────────────────
 export async function processMessage(
   ctx: Context,
@@ -37,11 +51,9 @@ export async function processMessage(
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
 
-  // Show typing indicator
-  await ctx.sendChatAction('typing');
-
-  try {
-    const profile = await getUserProfile(telegramId);
+  return withContinuousTyping(ctx, async () => {
+    try {
+      const profile = await getUserProfile(telegramId);
 
     // Build context
     let contextPrefix = '';
@@ -135,15 +147,18 @@ export async function processMessage(
     );
 
     // Update last active
-    await upsertUserProfile(telegramId, {
-      lastActiveAt: new Date(),
-      firstName: ctx.from.first_name,
-      username: ctx.from.username,
-    } as Partial<IUserProfile>);
-  } catch (err) {
-    console.error('[MessageHandler] Error:', err);
-    await ctx.reply(
-      "I hit an unexpected issue. Please try again in a moment — if the problem persists, check that all API keys are configured."
-    );
-  }
+    if (ctx.from) {
+      await upsertUserProfile(telegramId, {
+        lastActiveAt: new Date(),
+        firstName: ctx.from.first_name,
+        username: ctx.from.username,
+      } as Partial<IUserProfile>);
+    }
+    } catch (err) {
+      console.error('[MessageHandler] Error:', err);
+      await ctx.reply(
+        "I hit an unexpected issue. Please try again in a moment — if the problem persists, check that all API keys are configured."
+      );
+    }
+  });
 }
