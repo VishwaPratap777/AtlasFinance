@@ -25,7 +25,6 @@ function buildSystemPrompt(profile: IUserProfile | null): string {
 - **BE HUMAN & NATURAL**: Write clean, professional prose. Avoid robotic AI headers, rigid boilerplate templates, or synthetic filler phrases (e.g. never say "As an AI..." or "Here is the requested information").
 - **KEEP IT PUNCHY**: Aim for 2-4 tight bullet points or 1-2 concise paragraphs (under 120 words). Lead immediately with the headline insight in **bold**.
 - **NATURAL PROGRESSIVE LAYERING**: Follow up naturally when appropriate with a quick, organic offer (e.g. "_Let me know if you want to dig into their filings or check competitors._").
-- **SUBTLE DATA BADGING**: Append a small, clean italicized tag at the end when citing live or filing data (e.g., '_Source: SEC 10-Q_' or '_Source: Finnhub Live_'). Do NOT spam emojis.
 
 ## DISAMBIGUATION RULE (DO NOT ANNOY THE USER)
 - **Answer directly 95% of the time.** Do NOT ask clarifying questions unless a request is completely ambiguous (e.g. a single isolated word like "Apple").
