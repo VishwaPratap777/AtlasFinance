@@ -108,10 +108,14 @@ export async function handleDocument(ctx: Context): Promise<void> {
     );
     void conv;
 
-    // Determine what to do with the document
+    // Dynamic Document Contrast prompt
     const userPrompt = caption
       ? caption
-      : `I've just uploaded a document called "${fileName}". Please give me a concise executive summary of what it contains — key findings, financial highlights, or important risks if it's a financial document.`;
+      : `I've uploaded "${fileName}". Provide a Dynamic Document Contrast analysis:
+- **Core Highlights**: Key performance numbers & KPI drivers.
+- **Red Flags & Risks**: Heightened risk factors, debt shifts, or margin pressures.
+- **Anomalies**: Unexpected line item changes or discrepancies.
+Keep it concise and professional.`;
 
     await processMessage(ctx, userPrompt, 'document');
   } catch (err) {
