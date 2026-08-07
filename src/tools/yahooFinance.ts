@@ -31,28 +31,77 @@ const KNOWN_CRYPTO = new Set([
   'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI'
 ]);
 
+import axios from 'axios';
+
+export async function fetchYahooChartV8(symbol: string): Promise<QuickSummary | null> {
+  try {
+    const { data } = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`, {
+      params: { interval: '1d', range: '1d' },
+      timeout: 3000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (meta && (meta.regularMarketPrice || meta.chartPreviousClose)) {
+      const price = meta.regularMarketPrice || meta.chartPreviousClose || 0;
+      const prevClose = meta.chartPreviousClose || meta.previousClose || price;
+      const changePercent = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
+
+      return {
+        ticker: symbol,
+        name: meta.shortName || meta.symbol || symbol,
+        price,
+        changePercent,
+        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketDayHigh || price,
+        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketDayLow || price,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export async function quickLookup(ticker: string): Promise<QuickSummary> {
   let symbol = ticker.toUpperCase().trim();
   if (KNOWN_CRYPTO.has(symbol)) {
     symbol = `${symbol}-USD`;
   }
 
+  // If symbol is an index (starts with ^ like ^BSESN, ^NSEI), try Yahoo Chart V8 API first
+  if (symbol.startsWith('^')) {
+    const v8Res = await fetchYahooChartV8(symbol);
+    if (v8Res && v8Res.price > 0) {
+      return v8Res;
+    }
+  }
+
   // Single fast query for price and core key metrics
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const q: any = await withTimeout(yahooFinance.quote(symbol), 5000, 'Yahoo quote').catch(() => null);
-  if (!q) throw new Error(`No Yahoo Finance data for ${symbol}`);
+  if (q && q.regularMarketPrice) {
+    return {
+      ticker: symbol,
+      name: q.longName || q.shortName || symbol,
+      price: q.regularMarketPrice || 0,
+      changePercent: q.regularMarketChangePercent || 0,
+      marketCap: q.marketCap,
+      peRatio: q.trailingPE,
+      fiftyTwoWeekHigh: q.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: q.fiftyTwoWeekLow,
+      averageVolume: q.averageDailyVolume3Month || q.averageDailyVolume10Day,
+    };
+  }
 
-  return {
-    ticker: symbol,
-    name: q.longName || q.shortName || symbol,
-    price: q.regularMarketPrice || 0,
-    changePercent: q.regularMarketChangePercent || 0,
-    marketCap: q.marketCap,
-    peRatio: q.trailingPE,
-    fiftyTwoWeekHigh: q.fiftyTwoWeekHigh,
-    fiftyTwoWeekLow: q.fiftyTwoWeekLow,
-    averageVolume: q.averageDailyVolume3Month || q.averageDailyVolume10Day,
-  };
+  // Fallback to Chart V8 API if quote failed
+  const v8Fallback = await fetchYahooChartV8(symbol);
+  if (v8Fallback && v8Fallback.price > 0) {
+    return v8Fallback;
+  }
+
+  throw new Error(`No Yahoo Finance data for ${symbol}`);
 }
 
 export async function getHistoricalReturn(

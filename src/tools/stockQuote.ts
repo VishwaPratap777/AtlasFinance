@@ -368,9 +368,17 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     symbol = CRYPTO_NAME_MAP[symbol];
   }
 
-  // Resolve index/commodity/market aliases (e.g. NIFTY -> ^NSEI, TESLA -> TSLA)
+  // Resolve index/commodity/market aliases (e.g. NIFTY -> ^NSEI, INDIA.SENSEX -> ^BSESN)
   if (TICKER_ALIAS_MAP[symbol]) {
     symbol = TICKER_ALIAS_MAP[symbol];
+  } else {
+    const aliasKeys = Object.keys(TICKER_ALIAS_MAP).sort((a, b) => b.length - a.length);
+    for (const key of aliasKeys) {
+      if (symbol.includes(key)) {
+        symbol = TICKER_ALIAS_MAP[key];
+        break;
+      }
+    }
   }
 
   const isCrypto = KNOWN_CRYPTO.has(symbol) || symbol.endsWith('-USD');
