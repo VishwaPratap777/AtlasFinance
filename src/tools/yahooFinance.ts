@@ -26,17 +26,9 @@ export async function quickLookup(ticker: string): Promise<QuickSummary> {
     symbol = `${symbol}-USD`;
   }
 
+  // Single fast query for price and core key metrics
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [quoteRes, detailRes, profileRes] = await Promise.allSettled<any>([
-    yahooFinance.quote(symbol),
-    yahooFinance.quoteSummary(symbol, { modules: ['summaryDetail'] as any }),
-    yahooFinance.quoteSummary(symbol, { modules: ['assetProfile'] as any }),
-  ]);
-
-  const q = quoteRes.status === 'fulfilled' ? quoteRes.value : null;
-  const sd = detailRes.status === 'fulfilled' ? detailRes.value?.summaryDetail : null;
-  const ap = profileRes.status === 'fulfilled' ? profileRes.value?.assetProfile : null;
-
+  const q: any = await yahooFinance.quote(symbol).catch(() => null);
   if (!q) throw new Error(`No Yahoo Finance data for ${symbol}`);
 
   return {
@@ -45,11 +37,10 @@ export async function quickLookup(ticker: string): Promise<QuickSummary> {
     price: q.regularMarketPrice || 0,
     changePercent: q.regularMarketChangePercent || 0,
     marketCap: q.marketCap,
-    peRatio: sd?.trailingPE,
+    peRatio: q.trailingPE,
     fiftyTwoWeekHigh: q.fiftyTwoWeekHigh,
     fiftyTwoWeekLow: q.fiftyTwoWeekLow,
-    averageVolume: q.averageDailyVolume3Month,
-    description: ap?.longBusinessSummary?.substring(0, 400),
+    averageVolume: q.averageDailyVolume3Month || q.averageDailyVolume10Day,
   };
 }
 

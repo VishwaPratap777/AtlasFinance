@@ -115,7 +115,7 @@ export async function getConversation(telegramId: number): Promise<import('../mo
   return conv;
 }
 
-import { getRedisHistory, setRedisHistory, ChatMessageCache } from '../config/redis';
+import { getRedisHistory, setRedisHistory, ChatMessageCache, getCache, setCache } from '../config/redis';
 
 // ─── Build LLM message array from history (Redis Hot Memory -> MongoDB Fallback) ──
 export async function buildMessageHistory(
@@ -226,11 +226,21 @@ export async function upsertUserProfile(
     { $set: { ...updates, lastActiveAt: new Date() } },
     { upsert: true, returnDocument: 'after' }
   );
+  if (profile) {
+    await setCache(`userprofile:${telegramId}`, profile.toObject ? profile.toObject() : profile, 300);
+  }
   return profile;
 }
 
 export async function getUserProfile(telegramId: number): Promise<IUserProfile | null> {
-  return UserProfile.findOne({ telegramId });
+  const cached = await getCache<IUserProfile>(`userprofile:${telegramId}`);
+  if (cached) return cached;
+
+  const profile = await UserProfile.findOne({ telegramId });
+  if (profile) {
+    await setCache(`userprofile:${telegramId}`, profile.toObject ? profile.toObject() : profile, 300);
+  }
+  return profile;
 }
 
 // Re-export Conversation model for direct use

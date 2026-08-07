@@ -47,18 +47,18 @@ export async function retrieveRelevantChunks(
   documentIds?: string[],
   topK = 5
 ): Promise<{ content: string; score: number; fileName: string; chunkIndex: number }[]> {
-  const queryEmbedding = await embedQuery(query);
-
-  // Fetch candidate chunks for this user
+  // Fetch candidate chunks for this user first
   const filter: { telegramId: number; documentId?: { $in: string[] } } = { telegramId };
   if (documentIds && documentIds.length > 0) {
     filter.documentId = { $in: documentIds };
   }
 
-  // Fetch more candidates for re-ranking
+  // Fetch candidate chunks
   const candidates = await DocumentChunk.find(filter).limit(200).lean();
-
   if (candidates.length === 0) return [];
+
+  // Compute query embedding only if candidate chunks exist
+  const queryEmbedding = await embedQuery(query);
 
   // Score by cosine similarity
   const scored = candidates.map((chunk) => ({
