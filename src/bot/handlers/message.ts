@@ -127,8 +127,8 @@ export async function processMessage(
       }
 
       // If tool calls were made, clear any intermediate streaming message so raw tool status text (e.g. "Update user profile:") is never displayed
-      if (streamMessage) {
-        await ctx.telegram.deleteMessage(ctx.chat?.id, streamMessage.message_id).catch(() => {});
+      if (streamMessage && ctx.chat?.id) {
+        await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id).catch(() => {});
         streamMessage = null;
       }
 
