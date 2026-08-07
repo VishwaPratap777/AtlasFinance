@@ -8,6 +8,33 @@ import { IUserProfile } from '../../models/UserProfile';
 
 const MAX_TOOL_ROUNDS = 5; // prevent infinite tool-calling loops
 
+// ─── Pre-LLM Guardrail: Block jailbreak / persona hijack attempts ──────────────
+const JAILBREAK_PATTERNS = [
+  /\b(pretend|imagine|act as|you are now|you're now|roleplay|role-play|role play)\b.*\b(girlfriend|boyfriend|lover|partner|therapist|doctor|lawyer|human|person|woman|man|girl|boy)\b/i,
+  /\b(forget|ignore|disregard|override)\b.*\b(instruction|system|rule|prompt|constraint)\b/i,
+  /\b(dan|jailbreak|developer mode|bypass|uncensored|no filter|no restriction)\b/i,
+  /\b(flirt|kiss|hug|cuddle|sex|sexual|intimate|romantic|love me|date me|marry me)\b/i,
+  /\b(i love you|i like you|do you love|be my|my girlfriend|my boyfriend)\b/i,
+  /new instructions?.*:/i,
+  /you are no longer/i,
+  /your (true|real|actual) (self|identity|persona|nature)/i,
+];
+
+const OFF_TOPIC_DEFLECTIONS = [
+  "That's outside my lane — I'm Atlas, your financial analyst. What markets are you tracking today?",
+  "Not my territory. I'm Atlas — stocks, crypto, earnings, macro. What can I pull up for you?",
+  "I stay in my lane: markets, portfolios, and financial data. What do you want to look at?",
+];
+
+function isOffTopicRequest(text: string): string | null {
+  for (const pattern of JAILBREAK_PATTERNS) {
+    if (pattern.test(text)) {
+      return OFF_TOPIC_DEFLECTIONS[Math.floor(Math.random() * OFF_TOPIC_DEFLECTIONS.length)];
+    }
+  }
+  return null;
+}
+
 // ─── Escape Telegram markdown ──────────────────────────────────────────────────
 function escapeMarkdown(text: string): string {
   // Only escape characters that break Telegram MarkdownV2 but keep our intentional formatting
@@ -52,6 +79,13 @@ export async function processMessage(
 
   return withContinuousTyping(ctx, async () => {
     try {
+      // Check pre-LLM jailbreak / off-topic guardrail
+      const deflection = isOffTopicRequest(userText);
+      if (deflection) {
+        await ctx.reply(deflection);
+        return;
+      }
+
       // Fetch profile and conversation context in parallel
       let [profile, conv] = await Promise.all([
         getUserProfile(telegramId),
