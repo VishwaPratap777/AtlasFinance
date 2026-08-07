@@ -11,6 +11,8 @@ const envSchema = z.object({
   GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY is required'),
   GEMINI_API_KEY: z.string().optional().default(''),
   JINA_API_KEY: z.string().optional().default(''),
+  AGENT_ROUTER_API_KEY: z.string().optional().default(''),
+  AGENT_ROUTER_BASE_URL: z.string().optional().default('https://agentrouter.org/v1'),
 
   // Financial Data
   FINNHUB_API_KEY: z.string().optional().default(''),

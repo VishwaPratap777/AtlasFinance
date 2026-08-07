@@ -187,6 +187,76 @@ async function callGemini(
   }
 }
 
+// ─── Agent Router / OpenRouter Provider ─────────────────────────────────────────
+async function callAgentRouter(
+  messages: ChatMessage[],
+  tools?: ToolDefinition[],
+  modelName = 'anthropic/claude-3.5-sonnet'
+): Promise<LLMResponse> {
+  if (!env.AGENT_ROUTER_API_KEY) throw new Error('Agent Router API key not configured');
+  if (isModelCoolingDown(modelName)) {
+    throw new Error(`Model ${modelName} is temporarily cooling down.`);
+  }
+
+  try {
+    const formattedMessages = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const body: Record<string, unknown> = {
+      model: modelName,
+      messages: formattedMessages,
+      temperature: 0.7,
+      max_tokens: 450,
+    };
+
+    if (tools && tools.length > 0) {
+      body.tools = tools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+
+    const { data } = await axios.post(
+      `${env.AGENT_ROUTER_BASE_URL}/chat/completions`,
+      body,
+      {
+        headers: {
+          Authorization: `Bearer ${env.AGENT_ROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://atlas.ai',
+          'X-Title': 'Atlas',
+        },
+        timeout: 15000,
+      }
+    );
+
+    const choice = data.choices[0];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolCalls = choice.message?.tool_calls?.map((tc: any) => ({
+      name: tc.function.name,
+      args: JSON.parse(tc.function.arguments || '{}'),
+    }));
+
+    return {
+      content: choice.message?.content || '',
+      toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+      provider: `agent-router (${modelName})`,
+    };
+  } catch (err) {
+    const msg = (err as Error).message || '';
+    if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('quota')) {
+      markModelCoolingDown(modelName, 300000);
+    }
+    throw err;
+  }
+}
+
 // ─── Groq Streaming Call ──────────────────────────────────────────────────────
 async function callGroqStream(
   messages: ChatMessage[],
@@ -312,7 +382,16 @@ export async function chat(
     }
   }
 
-  // Tier 3: Gemini 2.5 Flash (1,500 RPD free tier quota)
+  // Tier 3: Agent Router (if AGENT_ROUTER_API_KEY is provided)
+  if (env.AGENT_ROUTER_API_KEY && !isModelCoolingDown('anthropic/claude-3.5-sonnet')) {
+    try {
+      return await callAgentRouter(messages, tools, 'anthropic/claude-3.5-sonnet');
+    } catch (agentRouterError) {
+      console.warn('[LLM] Agent Router failed:', (agentRouterError as Error).message);
+    }
+  }
+
+  // Tier 4: Gemini 2.5 Flash (1,500 RPD free tier quota)
   if (!isModelCoolingDown('gemini-2.5-flash')) {
     try {
       return await callGemini(messages, tools, 'gemini-2.5-flash');
