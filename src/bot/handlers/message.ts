@@ -11,10 +11,9 @@ const MAX_TOOL_ROUNDS = 5; // prevent infinite tool-calling loops
 // ─── Pre-LLM Guardrail: Block jailbreak / persona hijack attempts ──────────────
 const JAILBREAK_PATTERNS = [
   /\b(pretend|imagine|act as|you are now|you're now|roleplay|role-play|role play)\b.*\b(girlfriend|boyfriend|lover|partner|therapist|doctor|lawyer|human|person|woman|man|girl|boy)\b/i,
-  /\b(forget|ignore|disregard|override)\b.*\b(instruction|system|rule|prompt|constraint)\b/i,
+  /\b(forget|ignore|disregard|override)\b.*\b(instructions?|system|rules?|prompts?|constraints?)\b/i,
   /\b(dan|jailbreak|developer mode|bypass|uncensored|no filter|no restriction)\b/i,
-  /\b(flirt|kiss|hug|cuddle|sex|sexual|intimate|romantic|love me|date me|marry me)\b/i,
-  /\b(i love you|i like you|do you love|be my|my girlfriend|my boyfriend)\b/i,
+  /\b(flirt with me|kiss me|cuddle me|have sex|do sex|be my girlfriend|be my boyfriend|be my lover|marry me)\b/i,
   /new instructions?.*:/i,
   /you are no longer/i,
   /your (true|real|actual) (self|identity|persona|nature)/i,
