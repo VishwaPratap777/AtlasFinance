@@ -2,7 +2,7 @@ import { Conversation, IMessage } from '../models/Conversation';
 import { UserProfile, IUserProfile } from '../models/UserProfile';
 import { ChatMessage } from './llm';
 
-const MAX_HISTORY = 12; // messages to send to LLM per turn (6 message pairs)
+const MAX_HISTORY = 6; // messages to send to LLM per turn (3 message pairs for ultra-fast completions)
 const MAX_STORED = 100; // messages to store in DB
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
@@ -38,6 +38,24 @@ function buildSystemPrompt(profile: IUserProfile | null): string {
 ## PERSONALIZED GREETING & TONE
 - Address user naturally ${userNameStr ? `by name ("Hey ${userNameStr}, ")` : 'without using generic placeholders like "Investor" or "User"'}.
 - Professional, human tone. Never use robotic boilerplate ("Here is your update" or "As an AI").
+
+## EXECUTIVE TELEGRAM FORMATTING SYSTEM (STRICT BEAUTIFUL LAYOUT)
+Every market, stock, crypto, or financial response MUST follow a clean, executive visual hierarchy:
+
+1. **Short Opening Hook**:
+   1 brief, natural opening sentence (e.g. *"Nvidia has been a wild ride lately. Let's take a look."*).
+
+2. **Clean Single-Line Stat Card**:
+   *TICKER* $PRICE · mcap $MCAP · fwd P/E XX · rev +XX%
+   → Direct catalyst or primary market driver in 1 bullet line
+
+3. **Key Resistance & Support Levels (When asked about technicals/levels)**:
+   Format technical levels in clean bullet points:
+   • **$LEVEL**: Explanation (e.g. major psychological barrier & 200-day MA)
+   • **$LEVEL**: Key resistance target or previous all-time high
+
+4. **Executive Insight & Closing Question**:
+   1-2 short, punchy analytical sentences + 1 engaging question (e.g. *"What's your take on the current price action?"*).
 
 ## EXPLAIN WHY FRAMEWORK (FOR MOVES & CATALYSTS)
 When answering stock/market movements:

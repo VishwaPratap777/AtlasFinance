@@ -231,7 +231,7 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
         previousClose: data.pc,
         timestamp: new Date(data.t * 1000).toISOString(),
       };
-      await setCache(`quote:${symbol}`, res, 75);
+      await setCache(`quote:${symbol}`, res, 120);
       return res;
     }
   } catch {
