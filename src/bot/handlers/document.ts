@@ -61,34 +61,51 @@ export async function handleDocument(ctx: Context): Promise<void> {
     let extractedText = '';
 
     if (ext === '.pdf') {
+      const pdfOptions = { max: 0, verbosity: 0 };
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let pdfParse: any;
         try {
-          const pdfParseModule = await import('pdf-parse');
-          pdfParse = pdfParseModule.default ?? pdfParseModule;
-        } catch {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           pdfParse = require('pdf-parse');
+          pdfParse = pdfParse.default ?? pdfParse;
+        } catch {
+          const pdfParseModule = await import('pdf-parse');
+          pdfParse = pdfParseModule.default ?? pdfParseModule;
         }
 
         if (typeof pdfParse === 'function') {
-          const pdfData = await pdfParse(fileBuffer);
-          extractedText = pdfData.text || '';
+          const pdfData = await pdfParse(fileBuffer, pdfOptions);
+          extractedText = pdfData?.text || '';
         } else if (pdfParse && typeof pdfParse.PDFParse === 'function') {
-          const parser = new pdfParse.PDFParse();
-          const pdfData = await parser.parseBuffer(fileBuffer);
-          extractedText = pdfData.text || '';
+          const parser = new pdfParse.PDFParse(pdfOptions);
+          const pdfData = await parser.parseBuffer(fileBuffer, pdfOptions);
+          extractedText = pdfData?.text || '';
         } else {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const pdfReq = require('pdf-parse');
           const pdfFunc = pdfReq.default ?? pdfReq;
-          const pdfData = await pdfFunc(fileBuffer);
-          extractedText = pdfData.text || '';
+          const pdfData = await pdfFunc(fileBuffer, pdfOptions);
+          extractedText = pdfData?.text || '';
         }
       } catch (pdfErr) {
-        console.error('[DocumentHandler] PDF extraction error:', (pdfErr as Error).message);
-        throw pdfErr;
+        console.warn('[DocumentHandler] Standard pdf-parse failed:', (pdfErr as Error).message);
+      }
+
+      // Secondary fallback: Raw PDF string literal extraction for scanned/custom PDFs
+      if (!extractedText || extractedText.trim().length < 20) {
+        const rawString = fileBuffer.toString('latin1');
+        const textMatches: string[] = [];
+        const matches = rawString.match(/\(([^()]{3,})\)\s*(?:Tj|TJ|\/T)/g) || [];
+        for (const m of matches) {
+          const cleaned = m.replace(/^\(/, '').replace(/\)\s*(?:Tj|TJ|\/T)$/, '').trim();
+          if (cleaned.length > 2 && /[a-zA-Z0-9]/.test(cleaned)) {
+            textMatches.push(cleaned);
+          }
+        }
+        if (textMatches.length > 10) {
+          extractedText = textMatches.join(' ');
+        }
       }
     } else if (ext === '.txt' || ext === '.csv') {
       extractedText = fileBuffer.toString('utf-8');
