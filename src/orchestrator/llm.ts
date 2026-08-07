@@ -363,18 +363,9 @@ export async function chat(
   tools?: ToolDefinition[],
   preferredModel?: string
 ): Promise<LLMResponse> {
-  // Tier 1 Primary: Agent Router (if AGENT_ROUTER_API_KEY is provided)
-  if (env.AGENT_ROUTER_API_KEY && !isModelCoolingDown('anthropic/claude-3.5-sonnet')) {
-    try {
-      return await callAgentRouter(messages, tools, 'anthropic/claude-3.5-sonnet');
-    } catch (agentRouterError) {
-      console.warn('[LLM] Primary Agent Router failed, falling back:', (agentRouterError as Error).message);
-    }
-  }
-
   const targetModel = preferredModel || 'llama-3.3-70b-versatile';
 
-  // Tier 2: Groq Primary (llama-3.3-70b-versatile)
+  // Tier 1: Groq Primary (llama-3.3-70b-versatile — sub-second latency)
   if (!isModelCoolingDown(targetModel)) {
     try {
       return await callGroq(messages, tools, targetModel);
@@ -383,12 +374,21 @@ export async function chat(
     }
   }
 
-  // Tier 3: Groq Instant (llama-3.1-8b-instant — 500,000 TPD limit)
+  // Tier 2: Groq Instant (llama-3.1-8b-instant — 500,000 TPD limit)
   if (!isModelCoolingDown('llama-3.1-8b-instant')) {
     try {
       return await callGroq(messages, tools, 'llama-3.1-8b-instant');
     } catch (groqError2) {
       console.warn('[LLM] Groq 8B Instant failed:', (groqError2 as Error).message);
+    }
+  }
+
+  // Tier 3: Agent Router (if AGENT_ROUTER_API_KEY is provided & valid)
+  if (env.AGENT_ROUTER_API_KEY && !isModelCoolingDown('anthropic/claude-3.5-sonnet')) {
+    try {
+      return await callAgentRouter(messages, tools, 'anthropic/claude-3.5-sonnet');
+    } catch (agentRouterError) {
+      console.warn('[LLM] Agent Router failed:', (agentRouterError as Error).message);
     }
   }
 
@@ -417,15 +417,6 @@ export async function chatStream(
   onChunk?: (text: string) => void,
   preferredModel?: string
 ): Promise<LLMResponse> {
-  // Tier 1 Primary: Agent Router (if configured)
-  if (env.AGENT_ROUTER_API_KEY && !isModelCoolingDown('anthropic/claude-3.5-sonnet')) {
-    try {
-      return await callAgentRouter(messages, tools, 'anthropic/claude-3.5-sonnet');
-    } catch (agentRouterErr) {
-      console.warn('[LLM] Agent Router primary streaming failed, trying Groq:', (agentRouterErr as Error).message);
-    }
-  }
-
   try {
     return await callGroqStream(messages, tools, onChunk, preferredModel);
   } catch {

@@ -108,6 +108,24 @@ const TICKER_ALIAS_MAP: Record<string, string> = {
   MICROSTRATEGY: 'MSTR',
   ARM: 'ARM',
   BROADCOM: 'AVGO',
+  // Major Banks & Financial Institutions
+  'MORGAN STANLEY': 'MS',
+  MORGANSTANLEY: 'MS',
+  'GOLDMAN SACHS': 'GS',
+  GOLDMANSACHS: 'GS',
+  GOLDMAN: 'GS',
+  'JPMORGAN': 'JPM',
+  'JP MORGAN': 'JPM',
+  'JPMORGAN CHASE': 'JPM',
+  'BANK OF AMERICA': 'BAC',
+  BOFA: 'BAC',
+  CITIGROUP: 'C',
+  CITI: 'C',
+  WELLSFARGO: 'WFC',
+  'WELLS FARGO': 'WFC',
+  BLACKROCK: 'BLK',
+  SCHWAB: 'SCHW',
+  'CHARLES SCHWAB': 'SCHW',
 };
 
 // ─── Detect if a symbol is an Indian instrument ────────────────────────────────
