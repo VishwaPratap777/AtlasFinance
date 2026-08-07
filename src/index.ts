@@ -44,27 +44,32 @@ async function main(): Promise<void> {
   process.once('SIGINT', () => shutdown('SIGINT'));
   process.once('SIGTERM', () => shutdown('SIGTERM'));
 
+  // ── Start Express HTTP Server (Render Health Checks & Webhooks) ─────────────
+  const app = express();
+  app.use(express.json());
+
+  app.get('/', (_, res) => {
+    res.json({ status: 'ok', service: 'atlas', uptime: process.uptime() });
+  });
+
+  app.get('/health', (_, res) => {
+    res.json({ status: 'ok', service: 'atlas', timestamp: new Date().toISOString() });
+  });
+
   if (env.NODE_ENV === 'production' && env.WEBHOOK_URL) {
-    const app = express();
-    app.use(express.json());
-
-    app.get('/health', (_, res) => {
-      res.json({ status: 'ok', service: 'atlas', timestamp: new Date().toISOString() });
-    });
-
     const webhookPath = `/webhook/${env.WEBHOOK_SECRET}`;
     app.post(webhookPath, (req, res) => {
       bot.handleUpdate(req.body, res);
     });
+  }
 
-    app.listen(env.PORT, () => {
-      console.log(`✅ Express server listening on port ${env.PORT}`);
-    });
+  app.listen(env.PORT, '0.0.0.0', () => {
+    console.log(`✅ Express server listening on 0.0.0.0:${env.PORT} (Render Health Check Ready)`);
+  });
 
-    await startBot(bot);
-  } else {
-    await startBot(bot);
-    console.log('✅ Atlas is running in development mode (long polling)');
+  await startBot(bot);
+  if (!(env.NODE_ENV === 'production' && env.WEBHOOK_URL)) {
+    console.log('✅ Atlas is running in development/long-polling mode');
     console.log('💬 Open Telegram and message your bot to get started!');
   }
 }
