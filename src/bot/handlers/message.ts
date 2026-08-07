@@ -53,10 +53,18 @@ export async function processMessage(
   return withContinuousTyping(ctx, async () => {
     try {
       // Fetch profile and conversation context in parallel
-      const [profile, conv] = await Promise.all([
+      let [profile, conv] = await Promise.all([
         getUserProfile(telegramId),
         Conversation.findOne({ telegramId }),
       ]);
+
+      // Ensure profile captures Telegram user details immediately (e.g. on first message or after /reset)
+      if (ctx.from && (!profile || !profile.firstName)) {
+        profile = await upsertUserProfile(telegramId, {
+          firstName: ctx.from.first_name,
+          username: ctx.from.username,
+        });
+      }
 
       // Build context
       let contextPrefix = '';

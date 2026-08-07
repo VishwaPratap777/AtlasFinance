@@ -36,7 +36,7 @@ function buildSystemPrompt(profile: IUserProfile | null): string {
 - Always ground all market queries relative to today (${isoDateStr}). NEVER cite 2024 or past training dates as current.
 
 ## PERSONALIZED GREETING & TONE
-- Address user naturally ${userNameStr ? `by name ("Hey ${userNameStr}, ")` : ''} when starting a turn.
+- Address user naturally ${userNameStr ? `by name ("Hey ${userNameStr}, ")` : 'without using generic placeholders like "Investor" or "User"'}.
 - Professional, human tone. Never use robotic boilerplate ("Here is your update" or "As an AI").
 
 ## EXPLAIN WHY FRAMEWORK (FOR MOVES & CATALYSTS)
@@ -60,7 +60,7 @@ When analyzing user documents or filings, focus on:
 3. **Anomalies**: Unexpected line item changes or discrepancies vs expectations.
 
 ## USER CONTEXT
-- Name: ${userNameStr || 'Investor'}
+- Name: ${userNameStr || 'Not specified yet'}
 - Role: ${roleStr}
 - Watchlist tickers: ${watchlistStr}
 - Portfolio: ${portfolioStr}
