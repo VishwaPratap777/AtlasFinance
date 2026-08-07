@@ -22,17 +22,75 @@ export interface QuoteResult {
 
 const KNOWN_CRYPTO = new Set([
   'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
-  'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI'
+  'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI',
+  'BTC-USD', 'ETH-USD', 'SOL-USD'
 ]);
 
+const CRYPTO_NAME_MAP: Record<string, string> = {
+  BITCOIN: 'BTC',
+  ETHEREUM: 'ETH',
+  SOLANA: 'SOL',
+  DOGECOIN: 'DOGE',
+  RIPPLE: 'XRP',
+  CARDANO: 'ADA',
+  AVALANCHE: 'AVAX',
+  CHAINLINK: 'LINK',
+  SHIBA: 'SHIB',
+  POLYGON: 'MATIC',
+  PEPE: 'PEPE',
+  UNISWAP: 'UNI',
+  LITECOIN: 'LTC',
+};
+
 import { getCache, setCache } from '../config/redis';
+
+async function fetchBinanceCrypto(rawSymbol: string): Promise<QuoteResult | null> {
+  try {
+    const base = rawSymbol.replace('-USD', '').replace('USD', '').toUpperCase();
+    const pair = `${base}USDT`;
+    const { data } = await axios.get(`https://api.binance.com/api/v3/ticker/24hr`, {
+      params: { symbol: pair },
+      timeout: 3500,
+    });
+    if (data && data.lastPrice) {
+      const price = parseFloat(data.lastPrice);
+      const change = parseFloat(data.priceChange);
+      const changePercent = parseFloat(data.priceChangePercent);
+      const high = parseFloat(data.highPrice);
+      const low = parseFloat(data.lowPrice);
+      const open = parseFloat(data.openPrice);
+      const previousClose = parseFloat(data.prevClosePrice);
+
+      return {
+        ticker: `${base}-USD`,
+        price,
+        change,
+        changePercent,
+        high,
+        low,
+        open,
+        previousClose,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  } catch {
+    // fallback
+  }
+  return null;
+}
 
 export async function getQuote(ticker: string): Promise<QuoteResult> {
   let symbol = ticker.toUpperCase().trim();
   
-  // Normalize crypto tickers (e.g. BTC -> BTC-USD)
-  if (KNOWN_CRYPTO.has(symbol)) {
-    symbol = `${symbol}-USD`;
+  // Resolve full crypto names (e.g. BITCOIN -> BTC)
+  if (CRYPTO_NAME_MAP[symbol]) {
+    symbol = CRYPTO_NAME_MAP[symbol];
+  }
+
+  const isCrypto = KNOWN_CRYPTO.has(symbol) || symbol.endsWith('-USD');
+  if (isCrypto) {
+    const cleanBase = symbol.replace('-USD', '');
+    symbol = `${cleanBase}-USD`;
   }
 
   // Check 75s Redis quote cache
@@ -41,7 +99,16 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     return cachedQuote;
   }
 
-  // Try Finnhub first (for equities/ETFs)
+  // If crypto, try Binance 24hr API first for instant real-time crypto prices
+  if (isCrypto) {
+    const binanceRes = await fetchBinanceCrypto(symbol);
+    if (binanceRes) {
+      await setCache(`quote:${symbol}`, binanceRes, 75);
+      return binanceRes;
+    }
+  }
+
+  // Try Finnhub (for equities/ETFs)
   try {
     const { data } = await axios.get(`${BASE}/quote`, {
       params: { symbol },

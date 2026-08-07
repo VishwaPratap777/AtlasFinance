@@ -12,11 +12,11 @@ import { IUserProfile } from '../models/UserProfile';
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'get_stock_quote',
-    description: 'Get the current stock price and trading data for a ticker symbol. Use when user asks about a stock price, how a stock is doing today, or current market data.',
+    description: 'Get current real-time stock or cryptocurrency price and trading data for a ticker symbol (e.g. AAPL, TSLA, BTC, ETH, SOL, Bitcoin). ALWAYS call this tool when user asks for prices, quotes, or market status of any stock or crypto token.',
     parameters: {
       type: 'object',
       properties: {
-        ticker: { type: 'string', description: 'Stock ticker symbol (e.g. AAPL, TSLA, MSFT)' },
+        ticker: { type: 'string', description: 'Stock ticker symbol or crypto token code/name (e.g. AAPL, TSLA, BTC, ETH, SOL, BITCOIN)' },
       },
       required: ['ticker'],
     },
