@@ -28,6 +28,22 @@ async function main(): Promise<void> {
   // ── Create and start Telegram bot ──────────────────────────────────────────
   const bot = createBot();
 
+  // ── Graceful Shutdown Handler ──────────────────────────────────────────────
+  const shutdown = async (signal: string) => {
+    console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+    try {
+      bot.stop(signal);
+      await mongoose.connection.close();
+      console.log('✅ Database connection closed cleanly.');
+    } catch (err) {
+      console.error('Error during shutdown:', (err as Error).message);
+    }
+    process.exit(0);
+  };
+
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+
   if (env.NODE_ENV === 'production' && env.WEBHOOK_URL) {
     const app = express();
     app.use(express.json());
