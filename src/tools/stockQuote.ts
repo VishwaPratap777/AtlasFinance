@@ -134,6 +134,170 @@ function isIndianSymbol(symbol: string): boolean {
     symbol === '^NSEI' || symbol === '^BSESN' || symbol === '^NSEBANK';
 }
 
+// ─── Quote-intent detector (forces tool use, blocks price hallucination) ────────
+// Common all-caps words that look like tickers but aren't — never treat as symbols.
+const TICKER_STOPWORDS = new Set([
+  'THE', 'AND', 'FOR', 'ARE', 'USD', 'USA', 'CEO', 'CFO', 'ETF', 'IPO', 'GDP',
+  'API', 'FAQ', 'NEWS', 'WHAT', 'WHEN', 'WHY', 'HOW', 'WHO', 'BUY', 'SELL',
+  'HOLD', 'YES', 'NO', 'OK', 'PE', 'EPS', 'YTD', 'ATH', 'RSI', 'AI', 'OK',
+]);
+
+// Words that signal the user wants a live number/market read.
+const QUOTE_INTENT_RE =
+  /\b(price|quote|worth|trading|value|how('| i)?s|how much|doing|rate|level|movement|move|up|down|rally|dip|crash|pump|dump|chart|market|stock|shares?|ticker|crypto|coin)\b/i;
+
+/**
+ * Returns true when the message plausibly asks for a live price/market read on a
+ * specific asset — i.e. a turn where the model MUST call get_stock_quote and must
+ * never answer from memory. Reuses the same alias/crypto maps the quote resolver uses,
+ * so anything getQuote can resolve is detectable here. Deliberately errs toward firing:
+ * a false positive just forces a (correct) tool call; a false negative lets the 8B model
+ * fabricate a price, which is the bug we're killing.
+ */
+export function detectQuoteIntent(text: string): boolean {
+  if (!text) return false;
+  const upper = text.toUpperCase();
+
+  // Direct hit: any known crypto token, full crypto name, or ticker/index alias.
+  for (const key of Object.keys(CRYPTO_NAME_MAP)) {
+    if (new RegExp(`\\b${key}\\b`).test(upper)) return true;
+  }
+  for (const key of Object.keys(TICKER_ALIAS_MAP)) {
+    if (upper.includes(key)) return true;
+  }
+  for (const sym of KNOWN_CRYPTO) {
+    if (new RegExp(`\\b${sym.replace('-', '\\-')}\\b`).test(upper)) return true;
+  }
+
+  // Explicit ticker syntax: $AAPL / $BTC.
+  if (/\$[A-Z]{1,6}\b/.test(upper)) return true;
+
+  // Caps-shaped tokens must be matched against the ORIGINAL text, not the uppercased
+  // copy — the signal is that the USER typed them in caps (a real ticker like NVDA),
+  // so uppercasing first would make every short word look like a ticker.
+  const capsTokens = (text.match(/\b[A-Z]{2,5}\b/g) || []).filter(
+    (w) => !TICKER_STOPWORDS.has(w)
+  );
+
+  // A user-typed ALL-CAPS token paired with quote-intent language: "how's TSLA".
+  if (QUOTE_INTENT_RE.test(text) && capsTokens.length > 0) return true;
+
+  // Lone ticker with no other intent words: a short message (≤2 words) that is
+  // essentially just a ticker-shaped token, e.g. "NVDA" or "AAPL?". Bounded to short
+  // messages so stray caps mid-sentence don't force a needless tool call.
+  const wordCount = text.trim().split(/\s+/).length;
+  if (wordCount <= 2 && capsTokens.length > 0) return true;
+
+  return false;
+}
+
+// ─── Guards that force a turn OFF the deterministic quote fast-path ─────────────
+// A side-effect verb means the user wants to mutate state (watchlist/portfolio/
+// briefing), not read a price — must go through the LLM so the right write-tool runs.
+const SIDE_EFFECT_VERB_RE =
+  /\b(add|remove|delete|clear|track|follow|unwatch|unfollow|watchlist|watch|portfolio|owns?|holding?s?|hold|alert|briefing|buy|sell|purchase|bought|sold)\b/i;
+
+// A request for non-quote data — let the LLM route to the correct data tool.
+const OTHER_DATA_RE =
+  /\b(news|history|historical|earnings?|filing|10-?k|10-?q|8-?k|analyst|rating|dividend|profile|forecast|fundamentals?|balance sheet|cash flow|income statement|sec)\b/i;
+
+// A definitional/explainer ask — not a price lookup.
+const EXPLAINER_RE =
+  /\b(what (is|are|does|was)|explain|tell me about|who (is|are)|define|how does|describe)\b/i;
+
+// A comparison ("BTC vs ETH", "compare AAPL and MSFT") is analytical, not a plain
+// quote — defer to the LLM. Note: a bare "X and Y" is NOT a comparison; we quote both.
+const COMPARE_RE = /\bvs\b|\bversus\b|\bcompare\b|\bcomparison\b/i;
+
+// Conversational follow-up that reads as "give me the price of X" without any explicit
+// quote word — "what about SOL", "how about LTC", "where BTC at".
+const FOLLOWUP_RE = /\b(what|how)\s+about\b|\bwhere\b.*\bat\b/i;
+
+const MAX_FAST_PATH_TICKERS = 5;
+
+/**
+ * Deterministically resolves EVERY ticker named in a clean price ask, so the caller can
+ * call get_stock_quote for each and skip the decision LLM entirely. Returns [] the moment
+ * the turn looks like anything else (a state change, a different data type, an explainer,
+ * or a comparison), in which case the caller falls back to the LLM tool-routing path.
+ *
+ * This exists because the decision LLM (fast 8B) both (a) adds a full round-trip of
+ * latency and (b) mis-picks the tool when recent history primes it — e.g. answering
+ * "what about SOL and LTC?" with update_user_watchlist right after a watchlist add.
+ * Handling multiple assets here is what stops two-coin queries from misfiring: naming
+ * two assets used to bail to the LLM, which is exactly where the wrong tool got picked.
+ */
+export function extractQuoteTickers(text: string): string[] {
+  if (!text) return [];
+  const trimmed = text.trim();
+
+  // Any of these mean "not a plain quote" → defer to the LLM.
+  if (
+    SIDE_EFFECT_VERB_RE.test(trimmed) ||
+    OTHER_DATA_RE.test(trimmed) ||
+    EXPLAINER_RE.test(trimmed) ||
+    COMPARE_RE.test(trimmed)
+  ) {
+    return [];
+  }
+
+  const upper = trimmed.toUpperCase();
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const push = (sym: string | undefined) => {
+    if (sym && !seen.has(sym)) {
+      seen.add(sym);
+      found.push(sym);
+    }
+  };
+
+  // 1. Explicit $TICKER (all of them).
+  for (const m of upper.matchAll(/\$([A-Z]{1,6})\b/g)) push(m[1]);
+
+  // 2. Full crypto names (BITCOIN → BTC).
+  for (const [name, sym] of Object.entries(CRYPTO_NAME_MAP)) {
+    if (new RegExp(`\\b${name}\\b`).test(upper)) push(sym);
+  }
+
+  // 3. Known crypto tokens (BTC, ETH, …). Normalize any "-USD" pair to its base.
+  for (const tok of KNOWN_CRYPTO) {
+    if (new RegExp(`\\b${tok.replace('-', '\\-')}\\b`).test(upper)) push(tok.replace('-USD', ''));
+  }
+
+  // 4. Ticker/index/commodity aliases — longest key first, and blank out each match so
+  //    "BANK NIFTY" doesn't also register as "NIFTY".
+  let masked = upper;
+  for (const key of Object.keys(TICKER_ALIAS_MAP).sort((a, b) => b.length - a.length)) {
+    if (masked.includes(key)) {
+      push(TICKER_ALIAS_MAP[key]);
+      masked = masked.split(key).join(' ');
+    }
+  }
+
+  // 5. Lone caps-shaped tokens the USER typed (real tickers like NVDA). Matched against
+  //    the ORIGINAL text, never the uppercased copy — otherwise every ordinary word
+  //    ("about", "price", "doing") would look like a ticker.
+  for (const c of trimmed.match(/\b[A-Z]{2,5}\b/g) || []) {
+    if (!TICKER_STOPWORDS.has(c)) push(c);
+  }
+
+  if (found.length === 0) return [];
+
+  // Confirm it reads as a price ask, not incidental asset mentions. Any of:
+  //  - explicit quote language ("price", "doing", "worth", …)
+  //  - a "what/how about X" follow-up
+  //  - the message is essentially just the tickers plus a word or two of filler
+  //    (≤2 non-ticker words), e.g. "SOL and LTC", "solana ltc".
+  const wordCount = trimmed.split(/\s+/).length;
+  const isPriceAsk =
+    QUOTE_INTENT_RE.test(trimmed) ||
+    FOLLOWUP_RE.test(trimmed) ||
+    wordCount - found.length <= 2;
+  if (!isPriceAsk) return [];
+
+  return found.slice(0, MAX_FAST_PATH_TICKERS);
+}
+
 // ─── Detect if symbol is a non-USD index/commodity ────────────────────────────
 function getCurrencySymbol(symbol: string): string {
   if (isIndianSymbol(symbol)) return '₹';
@@ -235,6 +399,7 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     const { data } = await axios.get(`${BASE}/quote`, {
       params: { symbol },
       headers: finnhubHeaders(),
+      timeout: 4000,
     });
 
     if (data && data.c && data.c !== 0) {

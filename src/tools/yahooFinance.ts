@@ -2,6 +2,17 @@ import YahooFinance from 'yahoo-finance2';
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
+// yahoo-finance2 uses fetch internally and doesn't reliably honor a timeout option,
+// so bound every call — a hung upstream must never stall the Telegram reply.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export interface QuickSummary {
   ticker: string;
   name: string;
@@ -28,7 +39,7 @@ export async function quickLookup(ticker: string): Promise<QuickSummary> {
 
   // Single fast query for price and core key metrics
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const q: any = await yahooFinance.quote(symbol).catch(() => null);
+  const q: any = await withTimeout(yahooFinance.quote(symbol), 5000, 'Yahoo quote').catch(() => null);
   if (!q) throw new Error(`No Yahoo Finance data for ${symbol}`);
 
   return {
@@ -51,10 +62,14 @@ export async function getHistoricalReturn(
   const symbol = ticker.toUpperCase();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const historical: any[] = await yahooFinance.historical(symbol, {
-    period1: getPeriodStart(period),
-    interval: '1mo',
-  });
+  const historical: any[] = await withTimeout(
+    yahooFinance.historical(symbol, {
+      period1: getPeriodStart(period),
+      interval: '1mo',
+    }),
+    6000,
+    'Yahoo historical'
+  );
 
   if (!historical || historical.length < 2) {
     return `Insufficient historical data for ${symbol}.`;
