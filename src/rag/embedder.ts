@@ -26,24 +26,47 @@ async function embedWithJina(texts: string[]): Promise<number[][]> {
   return data.data.map((d: { embedding: number[] }) => d.embedding);
 }
 
+// ─── Fast hash vector fallback (384-dim normalized term frequency) ─────────────
+function embedWithHashFallback(texts: string[], dim = 384): number[][] {
+  return texts.map((text) => {
+    const vec = new Array(dim).fill(0);
+    const words = text.toLowerCase().match(/\w+/g) || [];
+    for (const word of words) {
+      let hash = 0;
+      for (let i = 0; i < word.length; i++) {
+        hash = (hash << 5) - hash + word.charCodeAt(i);
+        hash |= 0;
+      }
+      const idx = Math.abs(hash) % dim;
+      vec[idx] += 1;
+    }
+    const norm = Math.sqrt(vec.reduce((sum, val) => sum + val * val, 0)) || 1;
+    return vec.map((val) => val / norm);
+  });
+}
+
 // ─── Local embeddings fallback (@xenova/transformers) ─────────────────────────
 async function embedWithLocal(texts: string[]): Promise<number[][]> {
-  if (!localPipeline) {
-    const { pipeline } = await import('@xenova/transformers');
-    const pipe = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-    localPipeline = async (inputTexts: string[]) => {
-      const results = await Promise.all(
-        inputTexts.map((text) =>
-          pipe(text, { pooling: 'mean', normalize: true })
-        )
-      );
-      return {
-        data: results.map((r) => Array.from((r as { data: Float32Array }).data) as number[]),
+  try {
+    if (!localPipeline) {
+      const { pipeline } = await import('@xenova/transformers');
+      const pipe = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      localPipeline = async (inputTexts: string[]) => {
+        const results = await Promise.all(
+          inputTexts.map((text) =>
+            pipe(text, { pooling: 'mean', normalize: true })
+          )
+        );
+        return {
+          data: results.map((r) => Array.from((r as { data: Float32Array }).data) as number[]),
+        };
       };
-    };
+    }
+    return (await localPipeline(texts)).data;
+  } catch {
+    console.warn('[Embedder] Local transformers failed/unavailable, using term-hash vector');
+    return embedWithHashFallback(texts);
   }
-
-  return (await localPipeline(texts)).data;
 }
 
 // ─── Public embed function with fallback ──────────────────────────────────────
@@ -67,9 +90,13 @@ export async function embed(texts: string[]): Promise<number[][]> {
         throw new Error('No Jina key');
       }
     } catch {
-      console.warn('[Embedder] Jina failed, using local model');
-      const embeddings = await embedWithLocal(batch);
-      allEmbeddings.push(...embeddings);
+      try {
+        const embeddings = await embedWithLocal(batch);
+        allEmbeddings.push(...embeddings);
+      } catch {
+        const embeddings = embedWithHashFallback(batch);
+        allEmbeddings.push(...embeddings);
+      }
     }
   }
 

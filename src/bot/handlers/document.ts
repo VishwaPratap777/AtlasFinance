@@ -61,11 +61,35 @@ export async function handleDocument(ctx: Context): Promise<void> {
     let extractedText = '';
 
     if (ext === '.pdf') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
-      const pdfData = await pdfParse(fileBuffer);
-      extractedText = pdfData.text;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let pdfParse: any;
+        try {
+          const pdfParseModule = await import('pdf-parse');
+          pdfParse = pdfParseModule.default ?? pdfParseModule;
+        } catch {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          pdfParse = require('pdf-parse');
+        }
+
+        if (typeof pdfParse === 'function') {
+          const pdfData = await pdfParse(fileBuffer);
+          extractedText = pdfData.text || '';
+        } else if (pdfParse && typeof pdfParse.PDFParse === 'function') {
+          const parser = new pdfParse.PDFParse();
+          const pdfData = await parser.parseBuffer(fileBuffer);
+          extractedText = pdfData.text || '';
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const pdfReq = require('pdf-parse');
+          const pdfFunc = pdfReq.default ?? pdfReq;
+          const pdfData = await pdfFunc(fileBuffer);
+          extractedText = pdfData.text || '';
+        }
+      } catch (pdfErr) {
+        console.error('[DocumentHandler] PDF extraction error:', (pdfErr as Error).message);
+        throw pdfErr;
+      }
     } else if (ext === '.txt' || ext === '.csv') {
       extractedText = fileBuffer.toString('utf-8');
     } else if (SUPPORTED_IMAGES.includes(ext)) {
