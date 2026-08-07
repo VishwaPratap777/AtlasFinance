@@ -93,12 +93,15 @@ export async function processMessage(
     while (round < MAX_TOOL_ROUNDS) {
       round++;
 
+      // Only pass tool definitions on round 1 to allow instant synthesis on round 2
+      const activeTools = round === 1 ? TOOL_DEFINITIONS : undefined;
+
       const response = await chatStream(
         messages,
-        TOOL_DEFINITIONS,
+        activeTools,
         async (chunkText: string) => {
           const now = Date.now();
-          if (now - lastEditTime > 800 && chunkText.trim().length > 10) {
+          if (now - lastEditTime > 1200 && chunkText.trim().length > 20) {
             lastEditTime = now;
             const formattedChunk = formatForTelegram(chunkText);
             try {

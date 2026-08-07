@@ -82,6 +82,32 @@ const TICKER_ALIAS_MAP: Record<string, string> = {
   CRUDEOIL: 'CL=F',
   'CRUDE OIL': 'CL=F',
   NATURALGAS: 'NG=F',
+  // US Popular Companies & Name Aliases
+  TESLA: 'TSLA',
+  APPLE: 'AAPL',
+  MICROSOFT: 'MSFT',
+  NVIDIA: 'NVDA',
+  AMAZON: 'AMZN',
+  GOOGLE: 'GOOGL',
+  ALPHABET: 'GOOGL',
+  META: 'META',
+  FACEBOOK: 'META',
+  NETFLIX: 'NFLX',
+  AMD: 'AMD',
+  INTEL: 'INTC',
+  PALANTIR: 'PLTR',
+  COINBASE: 'COIN',
+  BERKSHIRE: 'BRK-B',
+  DISNEY: 'DIS',
+  UBER: 'UBER',
+  AIRBNB: 'ABNB',
+  BOEING: 'BA',
+  WALMART: 'WMT',
+  SUPERMICRO: 'SMCI',
+  ROBLOX: 'RBLX',
+  MICROSTRATEGY: 'MSTR',
+  ARM: 'ARM',
+  BROADCOM: 'AVGO',
 };
 
 // ─── Detect if a symbol is an Indian instrument ────────────────────────────────
@@ -133,6 +159,25 @@ async function fetchBinanceCrypto(rawSymbol: string): Promise<QuoteResult | null
   return null;
 }
 
+async function searchFinnhubTicker(query: string): Promise<string | null> {
+  try {
+    const { data } = await axios.get(`${BASE}/search`, {
+      params: { q: query },
+      headers: finnhubHeaders(),
+      timeout: 2500,
+    });
+    if (data && data.result && data.result.length > 0) {
+      const match = data.result.find(
+        (r: { symbol: string; type?: string }) => r.type === 'Common Stock' || !r.symbol.includes('.')
+      );
+      return match ? match.symbol : data.result[0].symbol;
+    }
+  } catch {
+    // fallback
+  }
+  return null;
+}
+
 export async function getQuote(ticker: string): Promise<QuoteResult> {
   let symbol = ticker.toUpperCase().trim();
   
@@ -141,7 +186,7 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     symbol = CRYPTO_NAME_MAP[symbol];
   }
 
-  // Resolve index/commodity/market aliases (e.g. NIFTY -> ^NSEI)
+  // Resolve index/commodity/market aliases (e.g. NIFTY -> ^NSEI, TESLA -> TSLA)
   if (TICKER_ALIAS_MAP[symbol]) {
     symbol = TICKER_ALIAS_MAP[symbol];
   }
@@ -194,22 +239,33 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
   }
 
   // Fallback to Yahoo Finance (supports crypto, international stocks, ETFs)
-  const { quickLookup } = await import('./yahooFinance');
-  const yahooData = await quickLookup(symbol);
+  try {
+    const { quickLookup } = await import('./yahooFinance');
+    const yahooData = await quickLookup(symbol);
 
-  const res: QuoteResult = {
-    ticker: yahooData.ticker,
-    price: yahooData.price,
-    change: (yahooData.price * (yahooData.changePercent || 0)) / 100,
-    changePercent: yahooData.changePercent,
-    high: yahooData.fiftyTwoWeekHigh || yahooData.price,
-    low: yahooData.fiftyTwoWeekLow || yahooData.price,
-    open: yahooData.price,
-    previousClose: yahooData.price / (1 + (yahooData.changePercent || 0) / 100),
-    timestamp: new Date().toISOString(),
-  };
-  await setCache(`quote:${symbol}`, res, 75);
-  return res;
+    const res: QuoteResult = {
+      ticker: yahooData.ticker,
+      price: yahooData.price,
+      change: (yahooData.price * (yahooData.changePercent || 0)) / 100,
+      changePercent: yahooData.changePercent,
+      high: yahooData.fiftyTwoWeekHigh || yahooData.price,
+      low: yahooData.fiftyTwoWeekLow || yahooData.price,
+      open: yahooData.price,
+      previousClose: yahooData.price / (1 + (yahooData.changePercent || 0) / 100),
+      timestamp: new Date().toISOString(),
+    };
+    await setCache(`quote:${symbol}`, res, 75);
+    return res;
+  } catch (err) {
+    // If quote failed and query looks like a company name (not already an index or crypto), try Finnhub symbol search
+    if (!symbol.startsWith('^') && !isCrypto) {
+      const searchedSymbol = await searchFinnhubTicker(ticker);
+      if (searchedSymbol && searchedSymbol !== symbol) {
+        return await getQuote(searchedSymbol);
+      }
+    }
+    throw err;
+  }
 }
 
 // Format quote for Telegram display
