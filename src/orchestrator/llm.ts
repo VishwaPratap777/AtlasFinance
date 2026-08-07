@@ -1,3 +1,4 @@
+import axios from 'axios';
 import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env';
