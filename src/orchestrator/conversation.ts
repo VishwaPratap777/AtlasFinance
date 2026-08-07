@@ -206,7 +206,7 @@ export async function upsertUserProfile(
   const profile = await UserProfile.findOneAndUpdate(
     { telegramId },
     { $set: { ...updates, lastActiveAt: new Date() } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   return profile;
 }

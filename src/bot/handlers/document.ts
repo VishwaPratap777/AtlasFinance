@@ -104,7 +104,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
     const conv = await Conversation.findOneAndUpdate(
       { telegramId },
       { $addToSet: { activeDocumentIds: documentId } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
     void conv;
 

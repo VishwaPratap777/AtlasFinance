@@ -92,7 +92,7 @@ async function callGroq(
 async function callGemini(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
-  modelName = 'gemini-1.5-flash'
+  modelName = 'gemini-2.0-flash'
 ): Promise<LLMResponse> {
   if (!gemini) throw new Error('Gemini API key not configured');
 
@@ -250,17 +250,17 @@ export async function chat(
     try {
       return await callGroq(messages, tools, 'llama-3.1-8b-instant');
     } catch (groqError2) {
-      console.warn('[LLM] Groq 8B failed, trying Gemini 1.5 Flash (1500 RPD quota):', (groqError2 as Error).message);
+      console.warn('[LLM] Groq 8B failed, trying Gemini 2.0 Flash (1500 RPD quota):', (groqError2 as Error).message);
       
-      // Tier 3: Gemini 1.5 Flash (1,500 requests/day free tier quota)
+      // Tier 3: Gemini 2.0 Flash (1,500 requests/day free tier quota)
       try {
-        return await callGemini(messages, tools, 'gemini-1.5-flash');
+        return await callGemini(messages, tools, 'gemini-2.0-flash');
       } catch (geminiError1) {
-        console.warn('[LLM] Gemini 1.5 Flash failed, trying Gemini 2.5 Flash:', (geminiError1 as Error).message);
+        console.warn('[LLM] Gemini 2.0 Flash failed, trying Gemini 1.5 Flash Latest:', (geminiError1 as Error).message);
         
-        // Tier 4: Gemini 2.5 Flash
+        // Tier 4: Gemini 1.5 Flash Latest
         try {
-          return await callGemini(messages, tools, 'gemini-2.5-flash');
+          return await callGemini(messages, tools, 'gemini-1.5-flash-latest');
         } catch (finalError) {
           console.error('[LLM] All 4 provider models failed:', (finalError as Error).message);
           throw new Error('All AI model quotas are currently exhausted. Please try again in a few minutes.');
