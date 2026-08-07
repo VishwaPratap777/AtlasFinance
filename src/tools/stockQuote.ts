@@ -42,6 +42,60 @@ const CRYPTO_NAME_MAP: Record<string, string> = {
   LITECOIN: 'LTC',
 };
 
+// ─── Global ticker/index alias resolution ──────────────────────────────────────
+const TICKER_ALIAS_MAP: Record<string, string> = {
+  // Indian Indices
+  NIFTY: '^NSEI',
+  'NIFTY50': '^NSEI',
+  'NIFTY 50': '^NSEI',
+  SENSEX: '^BSESN',
+  BSE: '^BSESN',
+  BANKNIFTY: '^NSEBANK',
+  'BANK NIFTY': '^NSEBANK',
+  NIFTYBANK: '^NSEBANK',
+  MIDCAP: '^NSEI', // approximate
+  // US Indices
+  'SP500': '^GSPC',
+  'S&P500': '^GSPC',
+  'S&P 500': '^GSPC',
+  'SPX': '^GSPC',
+  DOW: '^DJI',
+  DOWJONES: '^DJI',
+  'DOW JONES': '^DJI',
+  NASDAQ: '^IXIC',
+  NASDAQ100: '^NDX',
+  'NDX': '^NDX',
+  VIX: '^VIX',
+  // Global
+  FTSE: '^FTSE',
+  'FTSE100': '^FTSE',
+  NIKKEI: '^N225',
+  'NIKKEI225': '^N225',
+  HANGSENG: '^HSI',
+  DAX: '^GDAXI',
+  CAC: '^FCHI',
+  'CAC40': '^FCHI',
+  // Commodities (Yahoo Finance)
+  GOLD: 'GC=F',
+  SILVER: 'SI=F',
+  OIL: 'CL=F',
+  CRUDEOIL: 'CL=F',
+  'CRUDE OIL': 'CL=F',
+  NATURALGAS: 'NG=F',
+};
+
+// ─── Detect if a symbol is an Indian instrument ────────────────────────────────
+function isIndianSymbol(symbol: string): boolean {
+  return symbol.endsWith('.NS') || symbol.endsWith('.BO') ||
+    symbol === '^NSEI' || symbol === '^BSESN' || symbol === '^NSEBANK';
+}
+
+// ─── Detect if symbol is a non-USD index/commodity ────────────────────────────
+function getCurrencySymbol(symbol: string): string {
+  if (isIndianSymbol(symbol)) return '₹';
+  return '$';
+}
+
 import { getCache, setCache } from '../config/redis';
 
 async function fetchBinanceCrypto(rawSymbol: string): Promise<QuoteResult | null> {
@@ -85,6 +139,11 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
   // Resolve full crypto names (e.g. BITCOIN -> BTC)
   if (CRYPTO_NAME_MAP[symbol]) {
     symbol = CRYPTO_NAME_MAP[symbol];
+  }
+
+  // Resolve index/commodity/market aliases (e.g. NIFTY -> ^NSEI)
+  if (TICKER_ALIAS_MAP[symbol]) {
+    symbol = TICKER_ALIAS_MAP[symbol];
   }
 
   const isCrypto = KNOWN_CRYPTO.has(symbol) || symbol.endsWith('-USD');
@@ -157,9 +216,12 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
 export function formatQuote(q: QuoteResult): string {
   const dir = q.changePercent >= 0 ? '▲' : '▼';
   const sign = q.changePercent >= 0 ? '+' : '';
+  const cur = getCurrencySymbol(q.ticker);
+  // Use integer formatting for large prices (e.g. indices like NIFTY at 24,500)
+  const fmt = (n: number) => n >= 1000 ? n.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : n.toFixed(2);
   return (
-    `*${q.ticker}* — $${q.price.toFixed(2)}\n` +
-    `${dir} ${sign}${q.changePercent.toFixed(2)}% (${sign}$${q.change.toFixed(2)})\n` +
-    `H: $${q.high.toFixed(2)} · L: $${q.low.toFixed(2)} · Prev close: $${q.previousClose.toFixed(2)}`
+    `*${q.ticker}* — ${cur}${fmt(q.price)}\n` +
+    `${dir} ${sign}${q.changePercent.toFixed(2)}% (${sign}${cur}${fmt(q.change)})\n` +
+    `H: ${cur}${fmt(q.high)} · L: ${cur}${fmt(q.low)} · Prev close: ${cur}${fmt(q.previousClose)}`
   );
 }
