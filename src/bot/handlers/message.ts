@@ -52,23 +52,27 @@ export async function processMessage(
 
   return withContinuousTyping(ctx, async () => {
     try {
-      const profile = await getUserProfile(telegramId);
+      // Fetch profile and conversation context in parallel
+      const [profile, conv] = await Promise.all([
+        getUserProfile(telegramId),
+        Conversation.findOne({ telegramId }),
+      ]);
 
-    // Build context
-    let contextPrefix = '';
+      // Build context
+      let contextPrefix = '';
 
-    // Add RAG context if user has documents and might be asking about them
-    const conv = await Conversation.findOne({ telegramId });
-    const activeDocIds = conv?.activeDocumentIds || [];
-    if (activeDocIds.length > 0 || mediaType === 'document') {
-      const ragContext = await buildRAGContext(telegramId, userText, activeDocIds.length > 0 ? activeDocIds : undefined);
-      if (ragContext) {
-        contextPrefix = ragContext + '\n\n---\n\nUser question: ';
+      // Add RAG context if user sent a document or has active documents & asks a relevant question (>3 words)
+      const activeDocIds = conv?.activeDocumentIds || [];
+      const wordCount = userText.trim().split(/\s+/).length;
+      if (mediaType === 'document' || (activeDocIds.length > 0 && wordCount > 3)) {
+        const ragContext = await buildRAGContext(telegramId, userText, activeDocIds.length > 0 ? activeDocIds : undefined);
+        if (ragContext) {
+          contextPrefix = ragContext + '\n\n---\n\nUser question: ';
+        }
       }
-    }
 
-    const augmentedUserText = contextPrefix + userText;
-    let messages = await buildMessageHistory(telegramId, augmentedUserText, profile);
+      const augmentedUserText = contextPrefix + userText;
+      let messages = await buildMessageHistory(telegramId, augmentedUserText, profile);
 
     // ─── Agentic tool-calling loop with Telegram Streaming ─────────────────
     let finalResponse = '';

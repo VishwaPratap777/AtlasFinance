@@ -33,12 +33,33 @@ export interface LLMResponse {
   provider: string;
 }
 
+// ─── Model Cooldown / Circuit Breaker ──────────────────────────────────────────
+const modelCooldowns: Record<string, number> = {};
+
+function isModelCoolingDown(modelName: string): boolean {
+  const until = modelCooldowns[modelName];
+  if (!until) return false;
+  if (Date.now() > until) {
+    delete modelCooldowns[modelName];
+    return false;
+  }
+  return true;
+}
+
+function markModelCoolingDown(modelName: string, durationMs = 180000): void {
+  modelCooldowns[modelName] = Date.now() + durationMs;
+}
+
 // ─── Primary: Groq ──────────────────────────────────────────────────────────────
 async function callGroq(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   model = 'llama-3.3-70b-versatile'
 ): Promise<LLMResponse> {
+  if (isModelCoolingDown(model)) {
+    throw new Error(`Model ${model} is temporarily cooling down after a rate limit.`);
+  }
+
   const groqMessages = messages.map((m) => ({
     role: m.role as 'user' | 'assistant' | 'system',
     content: m.content,
@@ -63,29 +84,37 @@ async function callGroq(
     params.tool_choice = 'auto';
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await groq.chat.completions.create({ ...params, stream: false } as any) as any;
-  const choice = response.choices[0];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const response = await groq.chat.completions.create({ ...params, stream: false } as any) as any;
+    const choice = response.choices[0];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const toolCalls = choice.message.tool_calls?.map((tc: any) => ({
-    name: tc.function.name,
-    args: JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>,
-  }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolCalls = choice.message.tool_calls?.map((tc: any) => ({
+      name: tc.function.name,
+      args: JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>,
+    }));
 
-  let content = choice.message.content || '';
-  content = content
-    .replace(/<[a-zA-Z_0-9\-]+[^>]*>[\s\S]*?<\/[a-zA-Z_0-9\-]+>/gi, '')
-    .replace(/<[a-zA-Z_0-9\-]+[^>]*>/gi, '')
-    .replace(/<\/[a-zA-Z_0-9\-]+>/gi, '')
-    .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
-    .trim();
+    let content = choice.message.content || '';
+    content = content
+      .replace(/<[a-zA-Z_0-9\-]+[^>]*>[\s\S]*?<\/[a-zA-Z_0-9\-]+>/gi, '')
+      .replace(/<[a-zA-Z_0-9\-]+[^>]*>/gi, '')
+      .replace(/<\/[a-zA-Z_0-9\-]+>/gi, '')
+      .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
+      .trim();
 
-  return {
-    content,
-    toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
-    provider: 'groq',
-  };
+    return {
+      content,
+      toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+      provider: `groq (${model})`,
+    };
+  } catch (err) {
+    const msg = (err as Error).message || '';
+    if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('Rate limit')) {
+      markModelCoolingDown(model, 300000); // 5 min cooldown for rate-limited Groq models
+    }
+    throw err;
+  }
 }
 
 // ─── Fallback: Gemini ───────────────────────────────────────────────────────────
@@ -95,6 +124,9 @@ async function callGemini(
   modelName = 'gemini-2.0-flash'
 ): Promise<LLMResponse> {
   if (!gemini) throw new Error('Gemini API key not configured');
+  if (isModelCoolingDown(modelName)) {
+    throw new Error(`Model ${modelName} is temporarily cooling down after a rate limit.`);
+  }
 
   // Convert tools to Gemini format
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -124,27 +156,35 @@ async function callGemini(
     ? `Context: ${systemMsg.content}\n\n${lastMessage?.content || ''}`
     : lastMessage?.content || '';
 
-  const chatSession = model.startChat({ history });
-  const result = await chatSession.sendMessage(userPrompt);
-
-  const functionCalls = result.response.functionCalls();
-  const toolCalls = functionCalls?.map((fc) => ({
-    name: fc.name,
-    args: (fc.args || {}) as Record<string, unknown>,
-  }));
-
-  let text = '';
   try {
-    text = result.response.text();
-  } catch {
-    text = '';
-  }
+    const chatSession = model.startChat({ history });
+    const result = await chatSession.sendMessage(userPrompt);
 
-  return {
-    content: text,
-    toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
-    provider: `gemini (${modelName})`,
-  };
+    const functionCalls = result.response.functionCalls();
+    const toolCalls = functionCalls?.map((fc) => ({
+      name: fc.name,
+      args: (fc.args || {}) as Record<string, unknown>,
+    }));
+
+    let text = '';
+    try {
+      text = result.response.text();
+    } catch {
+      text = '';
+    }
+
+    return {
+      content: text,
+      toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+      provider: `gemini (${modelName})`,
+    };
+  } catch (err) {
+    const msg = (err as Error).message || '';
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+      markModelCoolingDown(modelName, 300000);
+    }
+    throw err;
+  }
 }
 
 // ─── Groq Streaming Call ──────────────────────────────────────────────────────
@@ -154,6 +194,10 @@ async function callGroqStream(
   onChunk?: (text: string) => void,
   model = 'llama-3.3-70b-versatile'
 ): Promise<LLMResponse> {
+  if (isModelCoolingDown(model)) {
+    throw new Error(`Model ${model} is cooling down.`);
+  }
+
   const groqMessages = messages.map((m) => ({
     role: m.role as 'user' | 'assistant' | 'system',
     content: m.content,
@@ -179,59 +223,67 @@ async function callGroqStream(
     params.tool_choice = 'auto';
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const stream = (await groq.chat.completions.create(params as any)) as unknown as AsyncIterable<any>;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stream = (await groq.chat.completions.create(params as any)) as unknown as AsyncIterable<any>;
 
-  let fullContent = '';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const accumulatedToolCalls: Record<number, { name: string; argsStr: string }> = {};
+    let fullContent = '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const accumulatedToolCalls: Record<number, { name: string; argsStr: string }> = {};
 
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta;
-    if (!delta) continue;
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (!delta) continue;
 
-    if (delta.content) {
-      fullContent += delta.content;
-      if (onChunk) {
-        onChunk(fullContent);
+      if (delta.content) {
+        fullContent += delta.content;
+        if (onChunk) {
+          onChunk(fullContent);
+        }
+      }
+
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const index = tc.index ?? 0;
+          if (!accumulatedToolCalls[index]) {
+            accumulatedToolCalls[index] = { name: '', argsStr: '' };
+          }
+          if (tc.function?.name) {
+            accumulatedToolCalls[index].name += tc.function.name;
+          }
+          if (tc.function?.arguments) {
+            accumulatedToolCalls[index].argsStr += tc.function.arguments;
+          }
+        }
       }
     }
 
-    if (delta.tool_calls) {
-      for (const tc of delta.tool_calls) {
-        const index = tc.index ?? 0;
-        if (!accumulatedToolCalls[index]) {
-          accumulatedToolCalls[index] = { name: '', argsStr: '' };
-        }
-        if (tc.function?.name) {
-          accumulatedToolCalls[index].name += tc.function.name;
-        }
-        if (tc.function?.arguments) {
-          accumulatedToolCalls[index].argsStr += tc.function.arguments;
-        }
-      }
+    const toolCalls = Object.values(accumulatedToolCalls)
+      .filter((tc) => tc.name.length > 0)
+      .map((tc) => ({
+        name: tc.name,
+        args: JSON.parse(tc.argsStr || '{}') as Record<string, unknown>,
+      }));
+
+    let cleanedContent = fullContent
+      .replace(/<[a-zA-Z_0-9\-]+[^>]*>[\s\S]*?<\/[a-zA-Z_0-9\-]+>/gi, '')
+      .replace(/<[a-zA-Z_0-9\-]+[^>]*>/gi, '')
+      .replace(/<\/[a-zA-Z_0-9\-]+>/gi, '')
+      .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
+      .trim();
+
+    return {
+      content: cleanedContent,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      provider: `groq-stream (${model})`,
+    };
+  } catch (err) {
+    const msg = (err as Error).message || '';
+    if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('Rate limit')) {
+      markModelCoolingDown(model, 300000);
     }
+    throw err;
   }
-
-  const toolCalls = Object.values(accumulatedToolCalls)
-    .filter((tc) => tc.name.length > 0)
-    .map((tc) => ({
-      name: tc.name,
-      args: JSON.parse(tc.argsStr || '{}') as Record<string, unknown>,
-    }));
-
-  let cleanedContent = fullContent
-    .replace(/<[a-zA-Z_0-9\-]+[^>]*>[\s\S]*?<\/[a-zA-Z_0-9\-]+>/gi, '')
-    .replace(/<[a-zA-Z_0-9\-]+[^>]*>/gi, '')
-    .replace(/<\/[a-zA-Z_0-9\-]+>/gi, '')
-    .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
-    .trim();
-
-  return {
-    content: cleanedContent,
-    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    provider: 'groq-stream',
-  };
 }
 
 // ─── Public interface with 4-stage resilience fallback ───────────────────────
@@ -240,33 +292,41 @@ export async function chat(
   tools?: ToolDefinition[],
   preferredModel?: string
 ): Promise<LLMResponse> {
-  // Tier 1: Groq Primary 70B (llama-3.3-70b-versatile)
-  try {
-    return await callGroq(messages, tools, preferredModel || 'llama-3.3-70b-versatile');
-  } catch (groqError1) {
-    console.warn('[LLM] Groq 70B rate-limited, trying Groq 8B Instant (500k TPD quota):', (groqError1 as Error).message);
-    
-    // Tier 2: Groq High-Capacity Instant (llama-3.1-8b-instant — 500,000 tokens/day limit!)
+  const targetModel = preferredModel || 'llama-3.3-70b-versatile';
+
+  // Tier 1: Groq Primary (llama-3.3-70b-versatile)
+  if (!isModelCoolingDown(targetModel)) {
+    try {
+      return await callGroq(messages, tools, targetModel);
+    } catch (groqError1) {
+      console.warn(`[LLM] Groq ${targetModel} failed:`, (groqError1 as Error).message);
+    }
+  }
+
+  // Tier 2: Groq Instant (llama-3.1-8b-instant — 500,000 TPD limit)
+  if (!isModelCoolingDown('llama-3.1-8b-instant')) {
     try {
       return await callGroq(messages, tools, 'llama-3.1-8b-instant');
     } catch (groqError2) {
-      console.warn('[LLM] Groq 8B failed, trying Gemini 2.0 Flash (1500 RPD quota):', (groqError2 as Error).message);
-      
-      // Tier 3: Gemini 2.0 Flash (1,500 requests/day free tier quota)
-      try {
-        return await callGemini(messages, tools, 'gemini-2.0-flash');
-      } catch (geminiError1) {
-        console.warn('[LLM] Gemini 2.0 Flash failed, trying Gemini 1.5 Flash Latest:', (geminiError1 as Error).message);
-        
-        // Tier 4: Gemini 1.5 Flash Latest
-        try {
-          return await callGemini(messages, tools, 'gemini-1.5-flash-latest');
-        } catch (finalError) {
-          console.error('[LLM] All 4 provider models failed:', (finalError as Error).message);
-          throw new Error('All AI model quotas are currently exhausted. Please try again in a few minutes.');
-        }
-      }
+      console.warn('[LLM] Groq 8B Instant failed:', (groqError2 as Error).message);
     }
+  }
+
+  // Tier 3: Gemini 2.0 Flash (1,500 RPD free tier quota)
+  if (!isModelCoolingDown('gemini-2.0-flash')) {
+    try {
+      return await callGemini(messages, tools, 'gemini-2.0-flash');
+    } catch (geminiError1) {
+      console.warn('[LLM] Gemini 2.0 Flash failed:', (geminiError1 as Error).message);
+    }
+  }
+
+  // Tier 4: Gemini 1.5 Flash Latest
+  try {
+    return await callGemini(messages, tools, 'gemini-1.5-flash-latest');
+  } catch (finalError) {
+    console.error('[LLM] All 4 provider models failed:', (finalError as Error).message);
+    throw new Error('All AI model quotas are currently exhausted. Please try again in a few minutes.');
   }
 }
 
