@@ -121,7 +121,7 @@ async function callGroq(
 async function callGemini(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
-  modelName = 'gemini-2.0-flash'
+  modelName = 'gemini-2.5-flash'
 ): Promise<LLMResponse> {
   if (!gemini) throw new Error('Gemini API key not configured');
   if (isModelCoolingDown(modelName)) {
@@ -312,18 +312,18 @@ export async function chat(
     }
   }
 
-  // Tier 3: Gemini 2.0 Flash (1,500 RPD free tier quota)
-  if (!isModelCoolingDown('gemini-2.0-flash')) {
+  // Tier 3: Gemini 2.5 Flash (1,500 RPD free tier quota)
+  if (!isModelCoolingDown('gemini-2.5-flash')) {
     try {
-      return await callGemini(messages, tools, 'gemini-2.0-flash');
+      return await callGemini(messages, tools, 'gemini-2.5-flash');
     } catch (geminiError1) {
-      console.warn('[LLM] Gemini 2.0 Flash failed:', (geminiError1 as Error).message);
+      console.warn('[LLM] Gemini 2.5 Flash failed:', (geminiError1 as Error).message);
     }
   }
 
-  // Tier 4: Gemini 1.5 Flash Latest
+  // Tier 4: Gemini 2.5 Flash (Retry / Fallback)
   try {
-    return await callGemini(messages, tools, 'gemini-1.5-flash-latest');
+    return await callGemini(messages, tools, 'gemini-2.5-flash');
   } catch (finalError) {
     console.error('[LLM] All 4 provider models failed:', (finalError as Error).message);
     throw new Error('All AI model quotas are currently exhausted. Please try again in a few minutes.');
