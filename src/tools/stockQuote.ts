@@ -23,7 +23,8 @@ export interface QuoteResult {
 const KNOWN_CRYPTO = new Set([
   'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
   'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI',
-  'BTC-USD', 'ETH-USD', 'SOL-USD'
+  'BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD', 'XRP-USD', 'ADA-USD',
+  'BTCUSD', 'ETHUSD', 'SOLUSD', 'DOGEUSD', 'XRPUSD', 'ADAUSD'
 ]);
 
 const CRYPTO_NAME_MAP: Record<string, string> = {
@@ -274,10 +275,10 @@ export function extractQuoteTickers(text: string): string[] {
     }
   }
 
-  // 5. Lone caps-shaped tokens the USER typed (real tickers like NVDA). Matched against
+  // 5. Lone caps-shaped tokens the USER typed (real tickers like NVDA, BTCUSD). Matched against
   //    the ORIGINAL text, never the uppercased copy — otherwise every ordinary word
   //    ("about", "price", "doing") would look like a ticker.
-  for (const c of trimmed.match(/\b[A-Z]{2,5}\b/g) || []) {
+  for (const c of trimmed.match(/\b[A-Z]{2,7}\b/g) || []) {
     if (!TICKER_STOPWORDS.has(c)) push(c);
   }
 
@@ -381,10 +382,11 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     }
   }
 
-  const isCrypto = KNOWN_CRYPTO.has(symbol) || symbol.endsWith('-USD');
+  let isCrypto = KNOWN_CRYPTO.has(symbol) || symbol.endsWith('-USD') || (symbol.endsWith('USD') && symbol.length <= 7);
   if (isCrypto) {
-    const cleanBase = symbol.replace('-USD', '');
+    const cleanBase = symbol.replace('-USD', '').replace(/USD$/, '');
     symbol = `${cleanBase}-USD`;
+    isCrypto = true;
   }
 
   // Check 75s Redis quote cache
