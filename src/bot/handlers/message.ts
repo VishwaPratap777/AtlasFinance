@@ -1,5 +1,5 @@
 import { Context } from 'telegraf';
-import { chatStream, ChatMessage } from '../../orchestrator/llm';
+import { chatStream, ChatMessage, selectOptimalModel } from '../../orchestrator/llm';
 import { buildMessageHistory, persistMessages, getUserProfile, upsertUserProfile } from '../../orchestrator/conversation';
 import { TOOL_DEFINITIONS, executeTool } from '../../orchestrator/tools';
 import { buildRAGContext } from '../../rag/retriever';
@@ -130,6 +130,9 @@ export async function processMessage(
       // Only pass tool definitions on round 1 to allow instant synthesis on round 2
       const activeTools = round === 1 ? TOOL_DEFINITIONS : undefined;
 
+      // Dynamically route simple queries to fast 8B model and complex queries to 70B research model
+      const preferredModel = selectOptimalModel(userText);
+
       const response = await chatStream(
         messages,
         activeTools,
@@ -154,7 +157,8 @@ export async function processMessage(
               }
             } catch { /* ignore intermediate edit errors */ }
           }
-        }
+        },
+        preferredModel
       );
 
       if (!response.toolCalls || response.toolCalls.length === 0) {

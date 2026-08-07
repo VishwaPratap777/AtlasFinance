@@ -357,13 +357,29 @@ async function callGroqStream(
   }
 }
 
+// ─── Dynamic Model Router (Fast 8B for chat/quotes vs 70B for deep research) ────
+export function selectOptimalModel(userQuery: string): string {
+  const q = userQuery.toLowerCase();
+  const deepResearchKeywords = [
+    'compare', 'comparison', 'versus', ' vs ',
+    'analyze', 'analysis', 'deep dive',
+    'valuation', 'dcf', 'financial statement',
+    'balance sheet', 'income statement', 'cash flow',
+    '10-k', '10-q', 'sec filing', 'annual report',
+    'audit', 'risk factors', 'forecast',
+  ];
+
+  const isDeepQuery = deepResearchKeywords.some((keyword) => q.includes(keyword));
+  return isDeepQuery ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+}
+
 // ─── Public interface with multi-tier resilience fallback ───────────────────
 export async function chat(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   preferredModel?: string
 ): Promise<LLMResponse> {
-  const targetModel = preferredModel || 'llama-3.3-70b-versatile';
+  const targetModel = preferredModel || 'llama-3.1-8b-instant';
 
   // Tier 1: Groq Primary (llama-3.3-70b-versatile — sub-second latency)
   if (!isModelCoolingDown(targetModel)) {
