@@ -9,7 +9,6 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
-    "moduleResolution": "bundler",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
