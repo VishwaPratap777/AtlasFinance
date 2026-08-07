@@ -357,15 +357,24 @@ async function callGroqStream(
   }
 }
 
-// ─── Public interface with 4-stage resilience fallback ───────────────────────
+// ─── Public interface with multi-tier resilience fallback ───────────────────
 export async function chat(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   preferredModel?: string
 ): Promise<LLMResponse> {
+  // Tier 1 Primary: Agent Router (if AGENT_ROUTER_API_KEY is provided)
+  if (env.AGENT_ROUTER_API_KEY && !isModelCoolingDown('anthropic/claude-3.5-sonnet')) {
+    try {
+      return await callAgentRouter(messages, tools, 'anthropic/claude-3.5-sonnet');
+    } catch (agentRouterError) {
+      console.warn('[LLM] Primary Agent Router failed, falling back:', (agentRouterError as Error).message);
+    }
+  }
+
   const targetModel = preferredModel || 'llama-3.3-70b-versatile';
 
-  // Tier 1: Groq Primary (llama-3.3-70b-versatile)
+  // Tier 2: Groq Primary (llama-3.3-70b-versatile)
   if (!isModelCoolingDown(targetModel)) {
     try {
       return await callGroq(messages, tools, targetModel);
@@ -374,21 +383,12 @@ export async function chat(
     }
   }
 
-  // Tier 2: Groq Instant (llama-3.1-8b-instant — 500,000 TPD limit)
+  // Tier 3: Groq Instant (llama-3.1-8b-instant — 500,000 TPD limit)
   if (!isModelCoolingDown('llama-3.1-8b-instant')) {
     try {
       return await callGroq(messages, tools, 'llama-3.1-8b-instant');
     } catch (groqError2) {
       console.warn('[LLM] Groq 8B Instant failed:', (groqError2 as Error).message);
-    }
-  }
-
-  // Tier 3: Agent Router (if AGENT_ROUTER_API_KEY is provided)
-  if (env.AGENT_ROUTER_API_KEY && !isModelCoolingDown('anthropic/claude-3.5-sonnet')) {
-    try {
-      return await callAgentRouter(messages, tools, 'anthropic/claude-3.5-sonnet');
-    } catch (agentRouterError) {
-      console.warn('[LLM] Agent Router failed:', (agentRouterError as Error).message);
     }
   }
 
@@ -401,11 +401,11 @@ export async function chat(
     }
   }
 
-  // Tier 4: Gemini 2.5 Flash (Retry / Fallback)
+  // Tier 4 Retry: Gemini 2.5 Flash
   try {
     return await callGemini(messages, tools, 'gemini-2.5-flash');
   } catch (finalError) {
-    console.error('[LLM] All 4 provider models failed:', (finalError as Error).message);
+    console.error('[LLM] All provider models failed:', (finalError as Error).message);
     throw new Error('All AI model quotas are currently exhausted. Please try again in a few minutes.');
   }
 }
@@ -417,6 +417,15 @@ export async function chatStream(
   onChunk?: (text: string) => void,
   preferredModel?: string
 ): Promise<LLMResponse> {
+  // Tier 1 Primary: Agent Router (if configured)
+  if (env.AGENT_ROUTER_API_KEY && !isModelCoolingDown('anthropic/claude-3.5-sonnet')) {
+    try {
+      return await callAgentRouter(messages, tools, 'anthropic/claude-3.5-sonnet');
+    } catch (agentRouterErr) {
+      console.warn('[LLM] Agent Router primary streaming failed, trying Groq:', (agentRouterErr as Error).message);
+    }
+  }
+
   try {
     return await callGroqStream(messages, tools, onChunk, preferredModel);
   } catch {
