@@ -95,9 +95,20 @@ export async function startBot(bot: Telegraf): Promise<void> {
     console.log(`[Bot] Webhook set to ${env.WEBHOOK_URL}${webhookPath}`);
   } else {
     // Development: long polling
-    await bot.telegram.deleteWebhook();
-    bot.launch();
-    console.log('[Bot] Long polling started');
+    try {
+      await bot.telegram.deleteWebhook().catch(() => {});
+      bot.launch().catch((err) => {
+        const msg = (err as Error).message || '';
+        if (msg.includes('409') || msg.includes('Conflict')) {
+          console.warn('[Bot] ⚠️ Long polling conflict: another instance (e.g. Render production server) is currently active on this token.');
+        } else {
+          console.error('[Bot] Launch error:', msg);
+        }
+      });
+      console.log('[Bot] Long polling active');
+    } catch (err) {
+      console.warn('[Bot] Start error:', (err as Error).message);
+    }
   }
 
   // Initialize background jobs
