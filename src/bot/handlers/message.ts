@@ -348,8 +348,10 @@ export async function processMessage(
     // price/stat-card, yet no data tool actually ran → the number was invented from
     // memory. Never show it. This catches any asset the intent detector flagged but the
     // forced tool call still didn't cover (e.g. an unknown symbol Groq declined to look up).
-    const usedDataTool = allToolCalls.some((tc) => DATA_TOOLS.has(tc.name));
-    if (quoteIntent && !usedDataTool && PRICE_OUTPUT_RE.test(finalResponse)) {
+    const usedDataTool =
+      allToolCalls.some((tc) => DATA_TOOLS.has(tc.name)) || quoteTickers.length > 0;
+
+    if (quoteIntent && !usedDataTool && allToolCalls.length === 0 && PRICE_OUTPUT_RE.test(finalResponse)) {
       console.warn(
         `[MessageHandler] Blocked fabricated price (quoteIntent, no data tool ran). userText="${userText}"`
       );
