@@ -8,6 +8,8 @@ import { processMessage } from './message';
 import { ingestDocument } from '../../rag/retriever';
 import { Conversation } from '../../models/Conversation';
 
+import { performPdfOcr } from '../../rag/ocr';
+
 // Supported document types
 const SUPPORTED_DOCS = ['.pdf', '.txt', '.csv'];
 const SUPPORTED_IMAGES = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
@@ -106,6 +108,12 @@ export async function handleDocument(ctx: Context): Promise<void> {
         if (textMatches.length > 10) {
           extractedText = textMatches.join(' ');
         }
+      }
+
+      // Tertiary fallback: 100% Free Self-Hosted OCR for Scanned / Image PDFs
+      if (!extractedText || extractedText.trim().length < 50) {
+        await ctx.reply("🔍 Scanned / picture PDF detected. Running local OCR scanner...");
+        extractedText = await performPdfOcr(fileBuffer);
       }
     } else if (ext === '.txt' || ext === '.csv') {
       extractedText = fileBuffer.toString('utf-8');
