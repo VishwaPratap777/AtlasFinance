@@ -277,17 +277,23 @@ export async function processMessage(
 
         let response;
         if (isDecisionRound && quoteTickers.length > 0) {
-          // Deterministic quote fast-path: the turn is an unambiguous price ask on one or
-          // more named assets, so we inject the get_stock_quote call(s) ourselves and skip
-          // the decision LLM entirely. Removes a full round-trip AND guarantees the correct
-          // tool — the primed 8B otherwise re-fires a recent write-tool (e.g. answering
-          // "what about SOL and LTC?" with update_user_watchlist right after a watchlist add).
+          const isNewsAsk = /\b(news|on with|up with|happening|update|developments?)\b/i.test(userText);
+          const toolCalls = quoteTickers.flatMap((ticker) => {
+            const list: { name: string; args: Record<string, unknown> }[] = [
+              { name: 'get_stock_quote', args: { ticker } }
+            ];
+            if (isNewsAsk) {
+              list.push({ name: 'get_company_news', args: { ticker, days: '3' } });
+            }
+            return list;
+          });
+
           response = {
             content: '',
-            toolCalls: quoteTickers.map((ticker) => ({ name: 'get_stock_quote', args: { ticker } })),
+            toolCalls,
             provider: 'fast-path',
           };
-          console.log(`[MessageHandler/timing] round=${round} fast-path get_stock_quote [${quoteTickers.join(', ')}]`);
+          console.log(`[MessageHandler/timing] round=${round} fast-path tools=[${toolCalls.map((t) => t.name).join(', ')}]`);
         } else {
           const tRound = Date.now();
           response = await chatStream(

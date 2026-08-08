@@ -36,7 +36,7 @@ export function createBot(): Telegraf {
       await ctx.reply(
         "⚠️ *Admin Clear Command*\n\n" +
           "This command will permanently wipe all MongoDB data, flush Redis cache, and log out all users.\n\n" +
-          "To proceed, please enter:\n`/clear 123456789Vis@`\nor send the admin password in chat.",
+          "To proceed, please enter:\n`/clear <admin_password>`\nwith your admin password.",
         { parse_mode: 'Markdown' }
       );
     }

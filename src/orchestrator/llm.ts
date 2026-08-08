@@ -55,6 +55,24 @@ function markModelCoolingDown(modelName: string, durationMs = RATE_LIMIT_COOLDOW
   modelCooldowns[modelName] = Date.now() + durationMs;
 }
 
+function safeJsonParse(jsonStr: string): Record<string, unknown> {
+  if (!jsonStr) return {};
+  try {
+    return JSON.parse(jsonStr) as Record<string, unknown>;
+  } catch {
+    try {
+      let repaired = jsonStr.trim();
+      if (!repaired.endsWith('}')) {
+        if (!repaired.endsWith('"')) repaired += '"';
+        repaired += '}';
+      }
+      return JSON.parse(repaired) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+}
+
 // ─── Code Leak Sanitization & Fallback Tool Call Extraction ───────────────────
 export function sanitizeLLMOutput(text: string): string {
   if (!text) return '';
@@ -181,7 +199,7 @@ async function callGroq(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let toolCalls = choice.message.tool_calls?.map((tc: any) => ({
       name: tc.function.name,
-      args: JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>,
+      args: safeJsonParse(tc.function.arguments || '{}'),
     }));
 
     let rawContent = choice.message.content || '';
@@ -346,7 +364,7 @@ async function callAgentRouter(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let toolCalls = choice.message?.tool_calls?.map((tc: any) => ({
       name: tc.function.name,
-      args: JSON.parse(tc.function.arguments || '{}'),
+      args: safeJsonParse(tc.function.arguments || '{}'),
     }));
 
     const rawContent = choice.message?.content || '';
@@ -465,7 +483,7 @@ async function callGroqStream(
       .filter((tc) => tc.name.length > 0)
       .map((tc) => ({
         name: tc.name,
-        args: JSON.parse(tc.argsStr || '{}') as Record<string, unknown>,
+        args: safeJsonParse(tc.argsStr || '{}'),
       }));
 
     if (!toolCalls || toolCalls.length === 0) {
