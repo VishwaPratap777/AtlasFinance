@@ -338,7 +338,7 @@ async function callAgentRouter(
           'HTTP-Referer': 'https://atlas.ai',
           'X-Title': 'Atlas',
         },
-        timeout: 7000,
+        timeout: 2500,
       }
     );
 
@@ -366,8 +366,15 @@ async function callAgentRouter(
     };
   } catch (err) {
     const msg = (err as Error).message || '';
-    if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('quota')) {
-      markModelCoolingDown(modelName, RATE_LIMIT_COOLDOWN_MS);
+    if (
+      msg.includes('429') ||
+      msg.includes('rate_limit') ||
+      msg.includes('quota') ||
+      msg.includes('401') ||
+      msg.includes('403') ||
+      msg.includes('unauthorized')
+    ) {
+      markModelCoolingDown(modelName, 24 * 3600 * 1000);
     }
     throw err;
   }
