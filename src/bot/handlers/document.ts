@@ -14,6 +14,8 @@ import { performPdfOcr } from '../../rag/ocr';
 const SUPPORTED_DOCS = ['.pdf', '.txt', '.csv'];
 const SUPPORTED_IMAGES = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 
+const processingDocs = new Set<string>();
+
 export async function handleDocument(ctx: Context): Promise<void> {
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
@@ -40,12 +42,17 @@ export async function handleDocument(ctx: Context): Promise<void> {
 
   if (!doc) return;
 
+  // Prevent duplicate execution on Telegram update retries
+  if (processingDocs.has(doc.file_id)) return;
+  processingDocs.add(doc.file_id);
+
   const caption = (ctx.message as { caption?: string })?.caption || '';
   const fileName = doc.file_name || 'document';
   const ext = path.extname(fileName).toLowerCase();
 
   // Check size (Telegram allows up to 20MB, but let's cap at 10MB for processing)
   if (doc.file_size && doc.file_size > 10 * 1024 * 1024) {
+    processingDocs.delete(doc.file_id);
     await ctx.reply("That file is too large for me to process (max 10MB). Could you send a smaller excerpt?");
     return;
   }
@@ -171,6 +178,7 @@ Keep it concise and professional.`;
     console.error('[DocumentHandler] Error:', err);
     await ctx.reply("I had trouble processing that document. Please try again.");
   } finally {
+    if (doc?.file_id) processingDocs.delete(doc.file_id);
     if (tempFile && fs.existsSync(tempFile)) {
       fs.unlinkSync(tempFile);
     }
