@@ -260,20 +260,30 @@ export async function processMessage(
       }
 
       // Progressive Telegram streaming callback (used only for synthesis/answer rounds).
-      const streamChunk = async (chunkText: string) => {
+      let isEditing = false;
+      let isCreatingStreamMessage = false;
+
+      const streamChunk = (chunkText: string) => {
         const now = Date.now();
-        if (now - lastEditTime > 800 && chunkText.trim().length > 40) {
+        if (!isEditing && !isCreatingStreamMessage && now - lastEditTime > 1200 && chunkText.trim().length > 80) {
           lastEditTime = now;
+          isEditing = true;
           const formattedChunk = formatForTelegram(chunkText);
-          try {
-            if (!streamMessage) {
-              streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(() => null);
-            } else {
-              await ctx.telegram
-                .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk, { parse_mode: 'Markdown' })
-                .catch(() => { });
+          (async () => {
+            try {
+              if (!streamMessage) {
+                isCreatingStreamMessage = true;
+                streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(() => null);
+                isCreatingStreamMessage = false;
+              } else {
+                await ctx.telegram
+                  .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk, { parse_mode: 'Markdown' })
+                  .catch(() => { });
+              }
+            } finally {
+              isEditing = false;
             }
-          } catch { /* ignore intermediate edit errors */ }
+          })();
         }
       };
 
@@ -373,7 +383,6 @@ export async function processMessage(
         }
 
         // If tool calls were made, clear any intermediate streaming message so raw tool status text (e.g. "Update user profile:") is never displayed.
-        // If delete fails, KEEP streamMessage reference so final response edits it in-place instead of creating duplicate messages!
         if (streamMessage && ctx.chat?.id) {
           try {
             await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id);
@@ -459,9 +468,8 @@ export async function processMessage(
 
       const formatted = formatForTelegram(finalResponse);
 
-      // Send or finalize Telegram message
+      // Send or finalize Telegram message — ALWAYS overwrite streamMessage in-place if it exists
       if (streamMessage) {
-        let editSuccess = false;
         try {
           await ctx.telegram.editMessageText(
             ctx.chat?.id,
@@ -470,31 +478,14 @@ export async function processMessage(
             formatted,
             { parse_mode: 'Markdown' }
           );
-          editSuccess = true;
         } catch {
-          try {
-            await ctx.telegram.editMessageText(
-              ctx.chat?.id,
-              streamMessage.message_id,
-              undefined,
-              formatted.replace(/[*_`]/g, '')
-            );
-            editSuccess = true;
-          } catch {
-            editSuccess = false;
-          }
-        }
-
-        // If in-place edit failed completely, delete the orphan streamMessage before sending a new reply
-        if (!editSuccess) {
-          if (ctx.chat?.id) {
-            await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id).catch(() => { });
-          }
-          try {
-            await ctx.reply(formatted, { parse_mode: 'Markdown' });
-          } catch {
-            await ctx.reply(formatted.replace(/[*_`]/g, ''));
-          }
+          // If Markdown parsing fails on tricky formatting, overwrite the existing message in-place with plain text!
+          await ctx.telegram.editMessageText(
+            ctx.chat?.id,
+            streamMessage.message_id,
+            undefined,
+            formatted.replace(/[*_`]/g, '')
+          ).catch(() => { });
         }
       } else {
         try {
