@@ -88,6 +88,8 @@ const TICKER_ALIAS_MAP: Record<string, string> = {
   APPLE: 'AAPL',
   MICROSOFT: 'MSFT',
   NVIDIA: 'NVDA',
+  NVIDS: 'NVDA',
+  NVID: 'NVDA',
   AMAZON: 'AMZN',
   GOOGLE: 'GOOGL',
   ALPHABET: 'GOOGL',

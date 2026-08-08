@@ -278,7 +278,14 @@ export async function processMessage(
           console.log(`[MessageHandler/timing] round=${round} fast-path get_stock_quote [${quoteTickers.join(', ')}]`);
         } else {
           const tRound = Date.now();
-          response = await chatStream(messages, activeTools, onChunk, modelForRound, roundMaxTokens);
+          response = await chatStream(
+            messages,
+            activeTools,
+            onChunk,
+            modelForRound,
+            roundMaxTokens,
+            isDecisionRound && quoteIntent
+          );
           console.log(
             `[MessageHandler/timing] round=${round} model=${modelForRound} decision=${isDecisionRound} ${Date.now() - tRound}ms`
           );
