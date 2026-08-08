@@ -208,7 +208,7 @@ const EXPLAINER_RE =
 
 // A comparison ("BTC vs ETH", "compare AAPL and MSFT") is analytical, not a plain
 // quote — defer to the LLM. Note: a bare "X and Y" is NOT a comparison; we quote both.
-const COMPARE_RE = /\bvs\b|\bversus\b|\bcompare\b|\bcomparison\b/i;
+const COMPARE_RE = /\bvs\b|\bversus\b|\bcompare\b|\bcomparison\b|\bperspective\b/i;
 
 // Conversational follow-up that reads as "give me the price of X" without any explicit
 // quote word — "what about SOL", "how about LTC", "where BTC at".
@@ -228,8 +228,6 @@ const MAX_FAST_PATH_TICKERS = 5;
  * Handling multiple assets here is what stops two-coin queries from misfiring: naming
  * two assets used to bail to the LLM, which is exactly where the wrong tool got picked.
  */
-const COMPARE_RE = /\bvs\b|\bversus\b|\bcompare\b|\bcomparison\b|\bperspective\b/i;
-
 export function extractQuoteTickers(text: string): string[] {
   if (!text) return [];
   const trimmed = text.trim();
