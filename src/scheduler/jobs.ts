@@ -41,6 +41,7 @@ async function runMorningBriefs(bot: Telegraf): Promise<void> {
 
     // Find users who want a brief at this approximate time
     const users = await UserProfile.find({
+      isAuthenticated: true,
       briefingEnabled: true,
       watchlist: { $exists: true, $ne: [] },
     });
@@ -95,6 +96,7 @@ async function runMorningBriefs(bot: Telegraf): Promise<void> {
 async function runWatchlistAlerts(bot: Telegraf): Promise<void> {
   try {
     const users = await UserProfile.find({
+      isAuthenticated: true,
       watchlist: { $exists: true, $ne: [] },
     });
 
@@ -126,6 +128,7 @@ async function runWatchlistAlerts(bot: Telegraf): Promise<void> {
 async function runEarningsAlerts(bot: Telegraf): Promise<void> {
   try {
     const users = await UserProfile.find({
+      isAuthenticated: true,
       'insightPreferences': 'earnings',
       watchlist: { $exists: true, $ne: [] },
     });
@@ -167,6 +170,7 @@ async function runEarningsAlerts(bot: Telegraf): Promise<void> {
 async function runFilingAlerts(bot: Telegraf): Promise<void> {
   try {
     const users = await UserProfile.find({
+      isAuthenticated: true,
       'insightPreferences': 'filings',
       watchlist: { $exists: true, $ne: [] },
     });

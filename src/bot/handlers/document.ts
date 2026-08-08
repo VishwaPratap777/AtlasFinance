@@ -7,6 +7,7 @@ import { analyzeImage } from '../../orchestrator/llm';
 import { processMessage } from './message';
 import { ingestDocument } from '../../rag/retriever';
 import { Conversation } from '../../models/Conversation';
+import { getUserProfile } from '../../orchestrator/conversation';
 
 import { performPdfOcr } from '../../rag/ocr';
 
@@ -19,6 +20,15 @@ const processingDocs = new Set<string>();
 export async function handleDocument(ctx: Context): Promise<void> {
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
+
+  const profile = await getUserProfile(telegramId);
+  if (!profile || !profile.isAuthenticated) {
+    await ctx.reply(
+      "🔒 *Authentication Required*\n\nPlease enter the access password to start using Atlas:",
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
 
   await ctx.sendChatAction('typing');
 

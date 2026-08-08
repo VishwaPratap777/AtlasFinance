@@ -6,6 +6,7 @@ import { detectQuoteIntent, extractQuoteTickers } from '../../tools/stockQuote';
 import { buildRAGContext } from '../../rag/retriever';
 import { Conversation } from '../../models/Conversation';
 import { IUserProfile } from '../../models/UserProfile';
+import { env } from '../../config/env';
 
 const MAX_TOOL_ROUNDS = 5; // prevent infinite tool-calling loops
 
@@ -79,9 +80,9 @@ function formatForTelegram(text: string): string {
 
 // ─── Continuous Typing Indicator Manager ──────────────────────────────────────
 export async function withContinuousTyping<T>(ctx: Context, action: () => Promise<T>): Promise<T> {
-  await ctx.sendChatAction('typing').catch(() => {});
+  await ctx.sendChatAction('typing').catch(() => { });
   const interval = setInterval(() => {
-    ctx.sendChatAction('typing').catch(() => {});
+    ctx.sendChatAction('typing').catch(() => { });
   }, 4000);
 
   try {
@@ -126,6 +127,24 @@ export async function processMessage(
         });
       }
 
+      // Check password authentication
+      if (!profile || !profile.isAuthenticated) {
+        if (userText.trim() === env.ACCESS_PASSWORD) {
+          profile = await upsertUserProfile(telegramId, { isAuthenticated: true });
+          await ctx.reply(
+            "🔓 *Access Granted!*\n\nWelcome to Atlas — your AI Financial Assistant.\n\nHow can I help you with your financial analysis today?",
+            { parse_mode: 'Markdown' }
+          );
+          return;
+        } else {
+          await ctx.reply(
+            "🔒 *Authentication Required*\n\nWelcome to Atlas! Please enter the access password to unlock the assistant:",
+            { parse_mode: 'Markdown' }
+          );
+          return;
+        }
+      }
+
       // Build context
       let contextPrefix = '';
 
@@ -142,291 +161,291 @@ export async function processMessage(
       const augmentedUserText = contextPrefix + userText;
       let messages = await buildMessageHistory(telegramId, augmentedUserText, profile);
 
-    // ─── Agentic tool-calling loop with Telegram Streaming ─────────────────
-    let finalResponse = '';
-    const allToolCalls: { name: string; args: Record<string, unknown>; result?: string }[] = [];
-    let round = 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let streamMessage: any = null;
-    let lastEditTime = 0;
+      // ─── Agentic tool-calling loop with Telegram Streaming ─────────────────
+      let finalResponse = '';
+      const allToolCalls: { name: string; args: Record<string, unknown>; result?: string }[] = [];
+      let round = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let streamMessage: any = null;
+      let lastEditTime = 0;
 
-    // Route once per message: simple queries → fast 8B, deep-research → 70B.
-    const routedModel = selectOptimalModel(userText);
-    const DECISION_MODEL = 'llama-3.1-8b-instant';
+      // Route once per message: simple queries → fast 8B, deep-research → 70B.
+      const routedModel = selectOptimalModel(userText);
+      const DECISION_MODEL = 'llama-3.1-8b-instant';
 
-    // If the user named an asset and wants a live read, we must never let the fast 8B
-    // model answer a price from stale training memory. Two mechanisms:
-    //  - quoteTickers: an unambiguous price ask on one or more named assets we can
-    //    resolve ourselves → skip the decision LLM entirely and call get_stock_quote
-    //    directly (faster, and immune to the model mis-picking a write-tool when a
-    //    recent watchlist add primes it).
-    //  - quoteIntent: fuzzier price language → keep the LLM path, backed by the
-    //    Layer-2 anti-hallucination guard below.
-    const quoteTickers = extractQuoteTickers(userText);
-    const quoteIntent = detectQuoteIntent(userText);
+      // If the user named an asset and wants a live read, we must never let the fast 8B
+      // model answer a price from stale training memory. Two mechanisms:
+      //  - quoteTickers: an unambiguous price ask on one or more named assets we can
+      //    resolve ourselves → skip the decision LLM entirely and call get_stock_quote
+      //    directly (faster, and immune to the model mis-picking a write-tool when a
+      //    recent watchlist add primes it).
+      //  - quoteIntent: fuzzier price language → keep the LLM path, backed by the
+      //    Layer-2 anti-hallucination guard below.
+      const quoteTickers = extractQuoteTickers(userText);
+      const quoteIntent = detectQuoteIntent(userText);
 
-    // Automatic Focus Watchlist Auto-Tracker: Auto-add and promote user's focused tickers in their watchlist
-    if (profile && quoteTickers.length > 0) {
-      const currentWatchlist = profile.watchlist || [];
-      const existingSet = new Set(currentWatchlist.map((w) => w.ticker));
-      let watchlistUpdated = false;
-      const newWatchlist = [...currentWatchlist];
+      // Automatic Focus Watchlist Auto-Tracker: Auto-add and promote user's focused tickers in their watchlist
+      if (profile && quoteTickers.length > 0) {
+        const currentWatchlist = profile.watchlist || [];
+        const existingSet = new Set(currentWatchlist.map((w) => w.ticker));
+        let watchlistUpdated = false;
+        const newWatchlist = [...currentWatchlist];
 
-      for (const ticker of quoteTickers) {
-        if (!existingSet.has(ticker)) {
-          newWatchlist.unshift({ ticker, alertThreshold: 5 });
-          existingSet.add(ticker);
-          watchlistUpdated = true;
-        } else {
-          const idx = newWatchlist.findIndex((w) => w.ticker === ticker);
-          if (idx > 0) {
-            const [item] = newWatchlist.splice(idx, 1);
-            newWatchlist.unshift(item);
+        for (const ticker of quoteTickers) {
+          if (!existingSet.has(ticker)) {
+            newWatchlist.unshift({ ticker, alertThreshold: 5 });
+            existingSet.add(ticker);
             watchlistUpdated = true;
-          }
-        }
-      }
-
-      if (watchlistUpdated) {
-        upsertUserProfile(telegramId, { watchlist: newWatchlist }).catch(() => {});
-      }
-    }
-
-    // Progressive Telegram streaming callback (used only for synthesis/answer rounds).
-    const streamChunk = async (chunkText: string) => {
-      const now = Date.now();
-      if (now - lastEditTime > 800 && chunkText.trim().length > 40) {
-        lastEditTime = now;
-        const formattedChunk = formatForTelegram(chunkText);
-        try {
-          if (!streamMessage) {
-            streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(() => null);
           } else {
-            await ctx.telegram
-              .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk, { parse_mode: 'Markdown' })
-              .catch(() => {});
-          }
-        } catch { /* ignore intermediate edit errors */ }
-      }
-    };
-
-    while (round < MAX_TOOL_ROUNDS) {
-      round++;
-
-      // Round 1 only: offer tools and let the fast 8B model decide which (if any) to call.
-      // Later rounds synthesize tool output on the routed model (70B for deep research).
-      const isDecisionRound = round === 1;
-      const activeTools = isDecisionRound ? TOOL_DEFINITIONS : undefined;
-      const modelForRound = isDecisionRound ? DECISION_MODEL : routedModel;
-
-      // Stream only synthesis rounds — a decision round's partial text is discarded the
-      // instant a tool call is chosen, so streaming it just burns Telegram edit calls.
-      const onChunk = isDecisionRound ? undefined : streamChunk;
-
-      // On a deep-research query the decision round runs on fast 8B purely to pick tools.
-      // If it answers directly (no tool), we regenerate on 70B just below — so cap its
-      // tokens to stop it spending time writing a full answer we're about to throw away.
-      const roundMaxTokens =
-        isDecisionRound && routedModel !== DECISION_MODEL ? 160 : undefined;
-
-      let response;
-      if (isDecisionRound && quoteTickers.length > 0) {
-        // Deterministic quote fast-path: the turn is an unambiguous price ask on one or
-        // more named assets, so we inject the get_stock_quote call(s) ourselves and skip
-        // the decision LLM entirely. Removes a full round-trip AND guarantees the correct
-        // tool — the primed 8B otherwise re-fires a recent write-tool (e.g. answering
-        // "what about SOL and LTC?" with update_user_watchlist right after a watchlist add).
-        response = {
-          content: '',
-          toolCalls: quoteTickers.map((ticker) => ({ name: 'get_stock_quote', args: { ticker } })),
-          provider: 'fast-path',
-        };
-        console.log(`[MessageHandler/timing] round=${round} fast-path get_stock_quote [${quoteTickers.join(', ')}]`);
-      } else {
-        const tRound = Date.now();
-        response = await chatStream(messages, activeTools, onChunk, modelForRound, roundMaxTokens);
-        console.log(
-          `[MessageHandler/timing] round=${round} model=${modelForRound} decision=${isDecisionRound} ${Date.now() - tRound}ms`
-        );
-      }
-
-      // Only the DECISION round may trigger tools. Synthesis rounds are terminal: their
-      // prose must never be re-interpreted as a tool call. The 8B model sometimes emits
-      // function-like text (e.g. "get_stock_quote>{...}" or a bare {"ticker":"USO"}),
-      // which extractFallbackToolCalls would mis-read as a real call — spawning phantom
-      // extra LLM rounds (slow) AND orphaning the streamed partial as a truncated second
-      // message (line ~196 deletes+nulls streamMessage, but the delete fails silently).
-      if (!isDecisionRound) {
-        response.toolCalls = undefined;
-      }
-
-      if (!response.toolCalls || response.toolCalls.length === 0) {
-        // No tool calls — this is the answer.
-        finalResponse = response.content;
-
-        // Deep-research query the fast model answered directly: upgrade with one
-        // streamed pass on the routed 70B model so quality isn't lost to the router.
-        if (isDecisionRound && routedModel !== DECISION_MODEL) {
-          const tUpgrade = Date.now();
-          const upgraded = await chatStream(messages, undefined, streamChunk, routedModel).catch(() => null);
-          console.log(`[MessageHandler/timing] upgrade model=${routedModel} ${Date.now() - tUpgrade}ms`);
-          if (upgraded && upgraded.content) finalResponse = upgraded.content;
-        }
-        break;
-      }
-
-      // If tool calls were made, clear any intermediate streaming message so raw tool status text (e.g. "Update user profile:") is never displayed.
-      // If delete fails, KEEP streamMessage reference so final response edits it in-place instead of creating duplicate messages!
-      if (streamMessage && ctx.chat?.id) {
-        try {
-          await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id);
-          streamMessage = null;
-        } catch {
-          console.warn('[MessageHandler] Could not delete intermediate stream message; keeping reference for in-place overwrite.');
-        }
-      }
-
-      // Keep the typing indicator alive without blocking tool execution.
-      ctx.sendChatAction('typing').catch(() => {});
-
-      // Execute this round's tool calls in parallel — they're independent lookups.
-      const tTools = Date.now();
-      const settled = await Promise.all(
-        response.toolCalls.map(async (tc) => {
-          const result = await executeTool(
-            tc.name,
-            tc.args,
-            profile,
-            telegramId,
-            async (updates: Partial<IUserProfile>) => {
-              await upsertUserProfile(telegramId, updates);
+            const idx = newWatchlist.findIndex((w) => w.ticker === ticker);
+            if (idx > 0) {
+              const [item] = newWatchlist.splice(idx, 1);
+              newWatchlist.unshift(item);
+              watchlistUpdated = true;
             }
+          }
+        }
+
+        if (watchlistUpdated) {
+          upsertUserProfile(telegramId, { watchlist: newWatchlist }).catch(() => { });
+        }
+      }
+
+      // Progressive Telegram streaming callback (used only for synthesis/answer rounds).
+      const streamChunk = async (chunkText: string) => {
+        const now = Date.now();
+        if (now - lastEditTime > 800 && chunkText.trim().length > 40) {
+          lastEditTime = now;
+          const formattedChunk = formatForTelegram(chunkText);
+          try {
+            if (!streamMessage) {
+              streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(() => null);
+            } else {
+              await ctx.telegram
+                .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk, { parse_mode: 'Markdown' })
+                .catch(() => { });
+            }
+          } catch { /* ignore intermediate edit errors */ }
+        }
+      };
+
+      while (round < MAX_TOOL_ROUNDS) {
+        round++;
+
+        // Round 1 only: offer tools and let the fast 8B model decide which (if any) to call.
+        // Later rounds synthesize tool output on the routed model (70B for deep research).
+        const isDecisionRound = round === 1;
+        const activeTools = isDecisionRound ? TOOL_DEFINITIONS : undefined;
+        const modelForRound = isDecisionRound ? DECISION_MODEL : routedModel;
+
+        // Stream only synthesis rounds — a decision round's partial text is discarded the
+        // instant a tool call is chosen, so streaming it just burns Telegram edit calls.
+        const onChunk = isDecisionRound ? undefined : streamChunk;
+
+        // On a deep-research query the decision round runs on fast 8B purely to pick tools.
+        // If it answers directly (no tool), we regenerate on 70B just below — so cap its
+        // tokens to stop it spending time writing a full answer we're about to throw away.
+        const roundMaxTokens =
+          isDecisionRound && routedModel !== DECISION_MODEL ? 160 : undefined;
+
+        let response;
+        if (isDecisionRound && quoteTickers.length > 0) {
+          // Deterministic quote fast-path: the turn is an unambiguous price ask on one or
+          // more named assets, so we inject the get_stock_quote call(s) ourselves and skip
+          // the decision LLM entirely. Removes a full round-trip AND guarantees the correct
+          // tool — the primed 8B otherwise re-fires a recent write-tool (e.g. answering
+          // "what about SOL and LTC?" with update_user_watchlist right after a watchlist add).
+          response = {
+            content: '',
+            toolCalls: quoteTickers.map((ticker) => ({ name: 'get_stock_quote', args: { ticker } })),
+            provider: 'fast-path',
+          };
+          console.log(`[MessageHandler/timing] round=${round} fast-path get_stock_quote [${quoteTickers.join(', ')}]`);
+        } else {
+          const tRound = Date.now();
+          response = await chatStream(messages, activeTools, onChunk, modelForRound, roundMaxTokens);
+          console.log(
+            `[MessageHandler/timing] round=${round} model=${modelForRound} decision=${isDecisionRound} ${Date.now() - tRound}ms`
           );
-          return { tc, result };
-        })
-      );
-      console.log(
-        `[MessageHandler/timing] tools=[${response.toolCalls.map((t) => t.name).join(',')}] ${Date.now() - tTools}ms`
-      );
+        }
 
-      const toolResults: string[] = [];
-      for (const { tc, result } of settled) {
-        toolResults.push(`Tool: ${tc.name}\nResult: ${result}`);
-        allToolCalls.push({ name: tc.name, args: tc.args, result });
-      }
+        // Only the DECISION round may trigger tools. Synthesis rounds are terminal: their
+        // prose must never be re-interpreted as a tool call. The 8B model sometimes emits
+        // function-like text (e.g. "get_stock_quote>{...}" or a bare {"ticker":"USO"}),
+        // which extractFallbackToolCalls would mis-read as a real call — spawning phantom
+        // extra LLM rounds (slow) AND orphaning the streamed partial as a truncated second
+        // message (line ~196 deletes+nulls streamMessage, but the delete fails silently).
+        if (!isDecisionRound) {
+          response.toolCalls = undefined;
+        }
 
-      // Side-effect-only round (watchlist/portfolio/briefing writes): the executor
-      // already returns a user-ready confirmation, so reply with it directly and skip
-      // the entire synthesis LLM round — one fewer full model call on these turns.
-      if (response.toolCalls.every((tc) => SIDE_EFFECT_TOOLS.has(tc.name))) {
-        finalResponse = settled.map((s) => s.result).join('\n');
-        break;
-      }
+        if (!response.toolCalls || response.toolCalls.length === 0) {
+          // No tool calls — this is the answer.
+          finalResponse = response.content;
 
-      // Add the assistant message with tool calls and tool results to history
-      const sanitizedContent = sanitizeLLMOutput(response.content);
-      const assistantWithTools: ChatMessage = {
-        role: 'assistant',
-        content:
-          sanitizedContent ||
-          `I looked up: ${response.toolCalls.map((tc) => tc.name).join(', ')}`,
-      };
+          // Deep-research query the fast model answered directly: upgrade with one
+          // streamed pass on the routed 70B model so quality isn't lost to the router.
+          if (isDecisionRound && routedModel !== DECISION_MODEL) {
+            const tUpgrade = Date.now();
+            const upgraded = await chatStream(messages, undefined, streamChunk, routedModel).catch(() => null);
+            console.log(`[MessageHandler/timing] upgrade model=${routedModel} ${Date.now() - tUpgrade}ms`);
+            if (upgraded && upgraded.content) finalResponse = upgraded.content;
+          }
+          break;
+        }
 
-      const toolResultMessage: ChatMessage = {
-        role: 'user',
-        content: `Tool results:\n${toolResults.join('\n\n')}\n\nNow synthesize these results into a concise, insightful response for the user. Remember: explain why it matters, don't just dump the data.`,
-      };
+        // If tool calls were made, clear any intermediate streaming message so raw tool status text (e.g. "Update user profile:") is never displayed.
+        // If delete fails, KEEP streamMessage reference so final response edits it in-place instead of creating duplicate messages!
+        if (streamMessage && ctx.chat?.id) {
+          try {
+            await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id);
+            streamMessage = null;
+          } catch {
+            console.warn('[MessageHandler] Could not delete intermediate stream message; keeping reference for in-place overwrite.');
+          }
+        }
 
-      messages = [...messages, assistantWithTools, toolResultMessage];
-    }
+        // Keep the typing indicator alive without blocking tool execution.
+        ctx.sendChatAction('typing').catch(() => { });
 
-    if (!finalResponse) {
-      finalResponse = "I wasn't able to get a clear response. Please try rephrasing your question.";
-    }
-
-    // Anti-hallucination backstop: the user asked for a live price, the reply prints a
-    // price/stat-card, yet no data tool actually ran → the number was invented from
-    // memory. Never show it. This catches any asset the intent detector flagged but the
-    // forced tool call still didn't cover (e.g. an unknown symbol Groq declined to look up).
-    const usedDataTool =
-      allToolCalls.some((tc) => DATA_TOOLS.has(tc.name)) || quoteTickers.length > 0;
-
-    if (quoteIntent && !usedDataTool && allToolCalls.length === 0 && PRICE_OUTPUT_RE.test(finalResponse)) {
-      console.warn(
-        `[MessageHandler] Blocked fabricated price (quoteIntent, no data tool ran). userText="${userText}"`
-      );
-      finalResponse =
-        "I couldn't pull a live quote for that just now — my data feed didn't return in time. Give me the ticker again and I'll retry.";
-    }
-
-    const formatted = formatForTelegram(finalResponse);
-
-    // Send or finalize Telegram message
-    if (streamMessage) {
-      let editSuccess = false;
-      try {
-        await ctx.telegram.editMessageText(
-          ctx.chat?.id,
-          streamMessage.message_id,
-          undefined,
-          formatted,
-          { parse_mode: 'Markdown' }
+        // Execute this round's tool calls in parallel — they're independent lookups.
+        const tTools = Date.now();
+        const settled = await Promise.all(
+          response.toolCalls.map(async (tc) => {
+            const result = await executeTool(
+              tc.name,
+              tc.args,
+              profile,
+              telegramId,
+              async (updates: Partial<IUserProfile>) => {
+                await upsertUserProfile(telegramId, updates);
+              }
+            );
+            return { tc, result };
+          })
         );
-        editSuccess = true;
-      } catch {
+        console.log(
+          `[MessageHandler/timing] tools=[${response.toolCalls.map((t) => t.name).join(',')}] ${Date.now() - tTools}ms`
+        );
+
+        const toolResults: string[] = [];
+        for (const { tc, result } of settled) {
+          toolResults.push(`Tool: ${tc.name}\nResult: ${result}`);
+          allToolCalls.push({ name: tc.name, args: tc.args, result });
+        }
+
+        // Side-effect-only round (watchlist/portfolio/briefing writes): the executor
+        // already returns a user-ready confirmation, so reply with it directly and skip
+        // the entire synthesis LLM round — one fewer full model call on these turns.
+        if (response.toolCalls.every((tc) => SIDE_EFFECT_TOOLS.has(tc.name))) {
+          finalResponse = settled.map((s) => s.result).join('\n');
+          break;
+        }
+
+        // Add the assistant message with tool calls and tool results to history
+        const sanitizedContent = sanitizeLLMOutput(response.content);
+        const assistantWithTools: ChatMessage = {
+          role: 'assistant',
+          content:
+            sanitizedContent ||
+            `I looked up: ${response.toolCalls.map((tc) => tc.name).join(', ')}`,
+        };
+
+        const toolResultMessage: ChatMessage = {
+          role: 'user',
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nNow synthesize these results into a concise, insightful response for the user. Remember: explain why it matters, don't just dump the data.`,
+        };
+
+        messages = [...messages, assistantWithTools, toolResultMessage];
+      }
+
+      if (!finalResponse) {
+        finalResponse = "I wasn't able to get a clear response. Please try rephrasing your question.";
+      }
+
+      // Anti-hallucination backstop: the user asked for a live price, the reply prints a
+      // price/stat-card, yet no data tool actually ran → the number was invented from
+      // memory. Never show it. This catches any asset the intent detector flagged but the
+      // forced tool call still didn't cover (e.g. an unknown symbol Groq declined to look up).
+      const usedDataTool =
+        allToolCalls.some((tc) => DATA_TOOLS.has(tc.name)) || quoteTickers.length > 0;
+
+      if (quoteIntent && !usedDataTool && allToolCalls.length === 0 && PRICE_OUTPUT_RE.test(finalResponse)) {
+        console.warn(
+          `[MessageHandler] Blocked fabricated price (quoteIntent, no data tool ran). userText="${userText}"`
+        );
+        finalResponse =
+          "I couldn't pull a live quote for that just now — my data feed didn't return in time. Give me the ticker again and I'll retry.";
+      }
+
+      const formatted = formatForTelegram(finalResponse);
+
+      // Send or finalize Telegram message
+      if (streamMessage) {
+        let editSuccess = false;
         try {
           await ctx.telegram.editMessageText(
             ctx.chat?.id,
             streamMessage.message_id,
             undefined,
-            formatted.replace(/[*_`]/g, '')
+            formatted,
+            { parse_mode: 'Markdown' }
           );
           editSuccess = true;
         } catch {
-          editSuccess = false;
+          try {
+            await ctx.telegram.editMessageText(
+              ctx.chat?.id,
+              streamMessage.message_id,
+              undefined,
+              formatted.replace(/[*_`]/g, '')
+            );
+            editSuccess = true;
+          } catch {
+            editSuccess = false;
+          }
         }
-      }
 
-      // If in-place edit failed completely, delete the orphan streamMessage before sending a new reply
-      if (!editSuccess) {
-        if (ctx.chat?.id) {
-          await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id).catch(() => {});
+        // If in-place edit failed completely, delete the orphan streamMessage before sending a new reply
+        if (!editSuccess) {
+          if (ctx.chat?.id) {
+            await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id).catch(() => { });
+          }
+          try {
+            await ctx.reply(formatted, { parse_mode: 'Markdown' });
+          } catch {
+            await ctx.reply(formatted.replace(/[*_`]/g, ''));
+          }
         }
+      } else {
         try {
           await ctx.reply(formatted, { parse_mode: 'Markdown' });
         } catch {
           await ctx.reply(formatted.replace(/[*_`]/g, ''));
         }
       }
-    } else {
-      try {
-        await ctx.reply(formatted, { parse_mode: 'Markdown' });
-      } catch {
-        await ctx.reply(formatted.replace(/[*_`]/g, ''));
+
+      console.log(
+        `[MessageHandler/timing] TOTAL ${Date.now() - tStart}ms rounds=${round} toolCalls=${allToolCalls.length}`
+      );
+
+      // Persist to DB
+      await persistMessages(
+        telegramId,
+        userText,
+        finalResponse,
+        mediaType,
+        allToolCalls.length > 0 ? allToolCalls : undefined
+      );
+
+      // Update last active — best-effort, non-blocking (reply is already sent).
+      if (ctx.from) {
+        void upsertUserProfile(telegramId, {
+          lastActiveAt: new Date(),
+          firstName: ctx.from.first_name,
+          username: ctx.from.username,
+        } as Partial<IUserProfile>).catch(() => { });
       }
-    }
-
-    console.log(
-      `[MessageHandler/timing] TOTAL ${Date.now() - tStart}ms rounds=${round} toolCalls=${allToolCalls.length}`
-    );
-
-    // Persist to DB
-    await persistMessages(
-      telegramId,
-      userText,
-      finalResponse,
-      mediaType,
-      allToolCalls.length > 0 ? allToolCalls : undefined
-    );
-
-    // Update last active — best-effort, non-blocking (reply is already sent).
-    if (ctx.from) {
-      void upsertUserProfile(telegramId, {
-        lastActiveAt: new Date(),
-        firstName: ctx.from.first_name,
-        username: ctx.from.username,
-      } as Partial<IUserProfile>).catch(() => {});
-    }
     } catch (err) {
       console.error('[MessageHandler] Error:', err);
       await ctx.reply(

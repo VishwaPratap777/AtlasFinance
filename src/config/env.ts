@@ -32,6 +32,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   WEBHOOK_URL: z.string().optional().default(''),
   WEBHOOK_SECRET: z.string().optional().default('atlas_webhook_secret'),
+
+  // Security / Auth
+  ACCESS_PASSWORD: z.string().default('Atlas@123'),
 });
 
 const parsed = envSchema.safeParse(process.env);

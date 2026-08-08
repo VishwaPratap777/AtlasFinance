@@ -10,6 +10,7 @@ import { Conversation } from '../models/Conversation';
 import { DocumentChunk } from '../models/DocumentChunk';
 
 import { clearRedisHistory } from '../config/redis';
+import { getUserProfile } from '../orchestrator/conversation';
 
 export function createBot(): Telegraf {
   const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
@@ -19,13 +20,22 @@ export function createBot(): Telegraf {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
 
+    const profile = await getUserProfile(telegramId);
+    if (!profile || !profile.isAuthenticated) {
+      await ctx.reply(
+        "🔒 *Authentication Required*\n\nPlease enter the access password to start using Atlas:",
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
     await UserProfile.deleteOne({ telegramId });
     await Conversation.deleteOne({ telegramId });
     await DocumentChunk.deleteMany({ telegramId });
     await clearRedisHistory(telegramId);
 
     await ctx.reply(
-      "🔄 *Profile & History Reset*\n\nYour profile, watchlist, portfolio, and conversation history have been cleared to zero.\n\nSend any text message to start fresh!",
+      "🔄 *Profile & History Reset*\n\nYour profile, watchlist, portfolio, and conversation history have been cleared to zero.\n\nEnter password to start fresh!",
       { parse_mode: 'Markdown' }
     );
   });

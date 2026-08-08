@@ -5,10 +5,20 @@ import * as path from 'path';
 import * as os from 'os';
 import { transcribeVoice } from '../../orchestrator/llm';
 import { processMessage } from './message';
+import { getUserProfile } from '../../orchestrator/conversation';
 
 export async function handleVoice(ctx: Context): Promise<void> {
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
+
+  const profile = await getUserProfile(telegramId);
+  if (!profile || !profile.isAuthenticated) {
+    await ctx.reply(
+      "🔒 *Authentication Required*\n\nPlease enter the access password to start using Atlas:",
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
 
   const voice = (ctx.message as { voice?: { file_id: string; duration: number } })?.voice;
   if (!voice) return;

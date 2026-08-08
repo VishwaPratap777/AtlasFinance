@@ -35,6 +35,7 @@ export interface IUserProfile extends Document {
   customAlerts: { description: string; condition: string; tickers: string[] }[];
   googleTokens?: IGoogleTokens;
   googleConnected: boolean;
+  isAuthenticated: boolean;
   onboardingComplete: boolean;
   onboardingStep: number;
   lastActiveAt: Date;
@@ -99,6 +100,7 @@ const UserProfileSchema = new Schema<IUserProfile>(
     },
     googleTokens: GoogleTokensSchema,
     googleConnected: { type: Boolean, default: false },
+    isAuthenticated: { type: Boolean, default: false },
     onboardingComplete: { type: Boolean, default: false },
     onboardingStep: { type: Number, default: 0 },
     lastActiveAt: { type: Date, default: Date.now },
