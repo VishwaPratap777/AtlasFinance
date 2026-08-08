@@ -228,12 +228,14 @@ const MAX_FAST_PATH_TICKERS = 5;
  * Handling multiple assets here is what stops two-coin queries from misfiring: naming
  * two assets used to bail to the LLM, which is exactly where the wrong tool got picked.
  */
+const COMPARE_RE = /\bvs\b|\bversus\b|\bcompare\b|\bcomparison\b|\bperspective\b/i;
+
 export function extractQuoteTickers(text: string): string[] {
   if (!text) return [];
   const trimmed = text.trim();
 
-  // Only side-effect write verbs (add/remove watchlist) skip quote fast-path
-  if (SIDE_EFFECT_VERB_RE.test(trimmed)) {
+  // Side-effect write verbs or comparison/perspective asks defer to LLM tool routing
+  if (SIDE_EFFECT_VERB_RE.test(trimmed) || COMPARE_RE.test(trimmed)) {
     return [];
   }
 
