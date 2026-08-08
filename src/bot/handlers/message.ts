@@ -165,6 +165,33 @@ export async function processMessage(
     const quoteTickers = extractQuoteTickers(userText);
     const quoteIntent = detectQuoteIntent(userText);
 
+    // Automatic Focus Watchlist Auto-Tracker: Auto-add and promote user's focused tickers in their watchlist
+    if (profile && quoteTickers.length > 0) {
+      const currentWatchlist = profile.watchlist || [];
+      const existingSet = new Set(currentWatchlist.map((w) => w.ticker));
+      let watchlistUpdated = false;
+      const newWatchlist = [...currentWatchlist];
+
+      for (const ticker of quoteTickers) {
+        if (!existingSet.has(ticker)) {
+          newWatchlist.unshift({ ticker, alertThreshold: 5 });
+          existingSet.add(ticker);
+          watchlistUpdated = true;
+        } else {
+          const idx = newWatchlist.findIndex((w) => w.ticker === ticker);
+          if (idx > 0) {
+            const [item] = newWatchlist.splice(idx, 1);
+            newWatchlist.unshift(item);
+            watchlistUpdated = true;
+          }
+        }
+      }
+
+      if (watchlistUpdated) {
+        upsertUserProfile(telegramId, { watchlist: newWatchlist }).catch(() => {});
+      }
+    }
+
     // Progressive Telegram streaming callback (used only for synthesis/answer rounds).
     const streamChunk = async (chunkText: string) => {
       const now = Date.now();
