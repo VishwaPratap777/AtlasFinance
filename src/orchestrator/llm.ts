@@ -454,12 +454,7 @@ async function callGroqStream(
       if (delta.content) {
         fullContent += delta.content;
         if (onChunk) {
-          // Awaited on purpose: the callback may send/replace a Telegram message and
-          // assign the streamMessage handle. If we fire-and-forget, a fast synthesis can
-          // finish and finalize BEFORE that first reply resolves — finalize then sees a
-          // null handle and posts a SECOND message, leaving the partial orphaned. The
-          // 800ms throttle makes this a no-op on most chunks, so it costs nothing.
-          await onChunk(fullContent);
+          void onChunk(fullContent);
         }
       }
 

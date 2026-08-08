@@ -68,6 +68,27 @@ function isOffTopicRequest(text: string): string | null {
   return null;
 }
 
+// ─── Extract recent focus tickers from conversation history ─────────────────────
+function extractContextFocusTickers(messages: ChatMessage[]): string[] {
+  const tickers: string[] = [];
+  const knownTickers = new Set([
+    'NVDA', 'TSLA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META',
+    'BTC', 'ETH', 'SOL', 'AMD', 'PLTR', 'NFLX', 'COIN', 'MSTR',
+  ]);
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const text = messages[i].content || '';
+    const matches = text.match(/\b[A-Z]{2,5}\b/g) || [];
+    for (const m of matches) {
+      if (knownTickers.has(m)) {
+        if (!tickers.includes(m)) tickers.push(m);
+      }
+    }
+    if (tickers.length >= 2) break;
+  }
+  return tickers;
+}
+
 // ─── Escape Telegram markdown ──────────────────────────────────────────────────
 function escapeMarkdown(text: string): string {
   // Only escape characters that break Telegram MarkdownV2 but keep our intentional formatting
@@ -256,6 +277,18 @@ export async function processMessage(
         }
       };
 
+      // Extract context focus tickers for follow-ups (e.g. "what about volume?", "compare it to Tesla?")
+      let resolvedTickers = [...quoteTickers];
+      if (resolvedTickers.length === 0 && isQuoteAsk) {
+        const contextTickers = extractContextFocusTickers(messages);
+        if (contextTickers.length > 0) resolvedTickers = [contextTickers[0]];
+      } else if (resolvedTickers.length === 1 && /\b(compare|versus|vs|difference|or)\b/i.test(userText)) {
+        const contextTickers = extractContextFocusTickers(messages);
+        for (const ct of contextTickers) {
+          if (!resolvedTickers.includes(ct)) resolvedTickers.unshift(ct);
+        }
+      }
+
       while (round < MAX_TOOL_ROUNDS) {
         round++;
 
@@ -276,14 +309,19 @@ export async function processMessage(
           isDecisionRound && routedModel !== DECISION_MODEL ? 160 : undefined;
 
         let response;
-        if (isDecisionRound && quoteTickers.length > 0) {
+        if (isDecisionRound && resolvedTickers.length > 0) {
           const isNewsAsk = /\b(news|on with|up with|happening|update|developments?)\b/i.test(userText);
-          const toolCalls = quoteTickers.flatMap((ticker) => {
+          const isCompareAsk = /\b(compare|versus|vs|difference|or)\b/i.test(userText);
+
+          const toolCalls = resolvedTickers.flatMap((ticker) => {
             const list: { name: string; args: Record<string, unknown> }[] = [
               { name: 'get_stock_quote', args: { ticker } }
             ];
             if (isNewsAsk) {
               list.push({ name: 'get_company_news', args: { ticker, days: '3' } });
+            }
+            if (isCompareAsk) {
+              list.push({ name: 'get_company_profile', args: { ticker, include_financials: 'true' } });
             }
             return list;
           });

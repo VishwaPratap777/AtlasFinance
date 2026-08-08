@@ -225,8 +225,8 @@ export function extractQuoteTickers(text: string): string[] {
   if (!text) return [];
   const trimmed = text.trim();
 
-  // Side-effect write verbs or comparison/perspective asks defer to LLM tool routing
-  if (SIDE_EFFECT_VERB_RE.test(trimmed) || COMPARE_RE.test(trimmed)) {
+  // Side-effect write verbs defer to LLM tool routing
+  if (SIDE_EFFECT_VERB_RE.test(trimmed)) {
     return [];
   }
 
@@ -272,15 +272,16 @@ export function extractQuoteTickers(text: string): string[] {
 
   if (found.length === 0) return [];
 
-  // Confirm it reads as a price ask, not incidental asset mentions. Any of:
+  // Confirm it reads as a price/market ask or comparison. Any of:
   //  - explicit quote language ("price", "doing", "worth", …)
+  //  - a comparison ask ("compare", "vs")
   //  - a "what/how about X" follow-up
   //  - the message is essentially just the tickers plus a word or two of filler
-  //    (≤2 non-ticker words), e.g. "SOL and LTC", "solana ltc".
   const wordCount = trimmed.split(/\s+/).length;
   const isPriceAsk =
     QUOTE_INTENT_RE.test(trimmed) ||
     FOLLOWUP_RE.test(trimmed) ||
+    COMPARE_RE.test(trimmed) ||
     wordCount - found.length <= 2;
   if (!isPriceAsk) return [];
 
