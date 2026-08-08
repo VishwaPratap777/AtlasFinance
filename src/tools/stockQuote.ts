@@ -461,11 +461,10 @@ export function formatQuote(q: QuoteResult): string {
   const dir = q.changePercent >= 0 ? '▲' : '▼';
   const sign = q.changePercent >= 0 ? '+' : '';
   const cur = getCurrencySymbol(q.ticker);
-  // Use integer formatting for large prices (e.g. indices like NIFTY at 24,500)
-  const fmt = (n: number) => n >= 1000 ? n.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : n.toFixed(2);
+  const fmt = (n: number) => (n >= 1000 ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : n.toFixed(2));
   return (
-    `*${q.ticker}* — ${cur}${fmt(q.price)}\n` +
-    `${dir} ${sign}${q.changePercent.toFixed(2)}% (${sign}${cur}${fmt(q.change)})\n` +
-    `H: ${cur}${fmt(q.high)} · L: ${cur}${fmt(q.low)} · Prev close: ${cur}${fmt(q.previousClose)}`
+    `*${q.ticker}* · ${cur}${fmt(q.price)} · ${dir} ${sign}${q.changePercent.toFixed(2)}% (${sign}${cur}${fmt(q.change)})\n` +
+    `• **Day Range**: ${cur}${fmt(q.low)} – ${cur}${fmt(q.high)}\n` +
+    `• **Prev Close**: ${cur}${fmt(q.previousClose)}`
   );
 }
