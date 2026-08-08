@@ -147,48 +147,43 @@ const TICKER_STOPWORDS = new Set([
 
 // Words that signal the user wants a live number/market read.
 const QUOTE_INTENT_RE =
-  /\b(price|quote|worth|trading|value|how('| i)?s|how much|doing|rate|level|movement|move|up|down|rally|dip|crash|pump|dump|chart|market|stock|shares?|ticker|crypto|coin)\b/i;
+  /\b(price|quote|worth|trading|value|how('| i)?s|how much|doing|rate|level|movement|move|up|down|rally|dip|crash|pump|dump|chart|market|stock|shares?|ticker|crypto|coin|on with|up with|happening)\b/i;
+
+// Conversational follow-up that reads as "give me the price/update on X"
+const FOLLOWUP_RE =
+  /\b(what|how)('s|\s+is)?\s+(about|on with|up with|happening with|on|up)\b|\bwhere\b.*\bat\b|\bwhats?\s+(on|up|happening)\b/i;
 
 /**
  * Returns true when the message plausibly asks for a live price/market read on a
  * specific asset — i.e. a turn where the model MUST call get_stock_quote and must
- * never answer from memory. Reuses the same alias/crypto maps the quote resolver uses,
- * so anything getQuote can resolve is detectable here. Deliberately errs toward firing:
- * a false positive just forces a (correct) tool call; a false negative lets the 8B model
- * fabricate a price, which is the bug we're killing.
+ * never answer from memory.
  */
 export function detectQuoteIntent(text: string): boolean {
   if (!text) return false;
   const upper = text.toUpperCase();
-
-  // Direct hit: any known crypto token, full crypto name, or ticker/index alias.
-  for (const key of Object.keys(CRYPTO_NAME_MAP)) {
-    if (new RegExp(`\\b${key}\\b`).test(upper)) return true;
-  }
-  for (const key of Object.keys(TICKER_ALIAS_MAP)) {
-    if (upper.includes(key)) return true;
-  }
-  for (const sym of KNOWN_CRYPTO) {
-    if (new RegExp(`\\b${sym.replace('-', '\\-')}\\b`).test(upper)) return true;
-  }
+  const trimmed = text.trim();
 
   // Explicit ticker syntax: $AAPL / $BTC.
   if (/\$[A-Z]{1,6}\b/.test(upper)) return true;
 
-  // Caps-shaped tokens must be matched against the ORIGINAL text, not the uppercased
-  // copy — the signal is that the USER typed them in caps (a real ticker like NVDA),
-  // so uppercasing first would make every short word look like a ticker.
+  const hasCrypto =
+    Object.keys(CRYPTO_NAME_MAP).some((key) => new RegExp(`\\b${key}\\b`).test(upper)) ||
+    Array.from(KNOWN_CRYPTO).some((sym) => new RegExp(`\\b${sym.replace('-', '\\-')}\\b`).test(upper));
+
+  const hasAlias = Object.keys(TICKER_ALIAS_MAP).some((key) => upper.includes(key));
+  const hasQuoteLanguage = QUOTE_INTENT_RE.test(trimmed) || FOLLOWUP_RE.test(trimmed);
+  const wordCount = trimmed.split(/\s+/).length;
+
+  if ((hasCrypto || hasAlias) && (hasQuoteLanguage || wordCount <= 4)) {
+    return true;
+  }
+
+  // Caps-shaped tokens typed by user paired with quote-intent language: "how's TSLA".
   const capsTokens = (text.match(/\b[A-Z]{2,5}\b/g) || []).filter(
     (w) => !TICKER_STOPWORDS.has(w)
   );
 
-  // A user-typed ALL-CAPS token paired with quote-intent language: "how's TSLA".
-  if (QUOTE_INTENT_RE.test(text) && capsTokens.length > 0) return true;
-
-  // Lone ticker with no other intent words: a short message (≤2 words) that is
-  // essentially just a ticker-shaped token, e.g. "NVDA" or "AAPL?". Bounded to short
-  // messages so stray caps mid-sentence don't force a needless tool call.
-  const wordCount = text.trim().split(/\s+/).length;
+  if (hasQuoteLanguage && capsTokens.length > 0) return true;
   if (wordCount <= 2 && capsTokens.length > 0) return true;
 
   return false;
@@ -211,10 +206,6 @@ const EXPLAINER_RE =
 // A comparison ("BTC vs ETH", "compare AAPL and MSFT") is analytical, not a plain
 // quote — defer to the LLM. Note: a bare "X and Y" is NOT a comparison; we quote both.
 const COMPARE_RE = /\bvs\b|\bversus\b|\bcompare\b|\bcomparison\b|\bperspective\b/i;
-
-// Conversational follow-up that reads as "give me the price of X" without any explicit
-// quote word — "what about SOL", "how about LTC", "where BTC at".
-const FOLLOWUP_RE = /\b(what|how)\s+about\b|\bwhere\b.*\bat\b/i;
 
 const MAX_FAST_PATH_TICKERS = 5;
 
@@ -401,31 +392,35 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     }
   }
 
-  // Try Finnhub (for equities/ETFs)
-  try {
-    const { data } = await axios.get(`${BASE}/quote`, {
-      params: { symbol },
-      headers: finnhubHeaders(),
-      timeout: 4000,
-    });
+  // Finnhub only supports US equities/ETFs. Skip Finnhub for crypto, indices (^), or commodities (=F)
+  const isEquitiesOnly = !isCrypto && !symbol.startsWith('^') && !symbol.includes('=F');
 
-    if (data && data.c && data.c !== 0) {
-      const res: QuoteResult = {
-        ticker: symbol,
-        price: data.c,
-        change: data.d,
-        changePercent: data.dp,
-        high: data.h,
-        low: data.l,
-        open: data.o,
-        previousClose: data.pc,
-        timestamp: new Date(data.t * 1000).toISOString(),
-      };
-      await setCache(`quote:${symbol}`, res, 120);
-      return res;
+  if (isEquitiesOnly) {
+    try {
+      const { data } = await axios.get(`${BASE}/quote`, {
+        params: { symbol },
+        headers: finnhubHeaders(),
+        timeout: 2500,
+      });
+
+      if (data && data.c && data.c !== 0) {
+        const res: QuoteResult = {
+          ticker: symbol,
+          price: data.c,
+          change: data.d,
+          changePercent: data.dp,
+          high: data.h,
+          low: data.l,
+          open: data.o,
+          previousClose: data.pc,
+          timestamp: new Date(data.t * 1000).toISOString(),
+        };
+        await setCache(`quote:${symbol}`, res, 120);
+        return res;
+      }
+    } catch {
+      // Fall through to Yahoo Finance
     }
-  } catch {
-    // Fall through to Yahoo Finance
   }
 
   // Fallback to Yahoo Finance (supports crypto, international stocks, ETFs)

@@ -199,21 +199,24 @@ export async function executeTool(
 
       case 'get_company_profile': {
         const ticker = args.ticker as string;
-        const profile = await getCompanyProfile(ticker);
+        const [profile, fin, insider] = await Promise.all([
+          getCompanyProfile(ticker),
+          args.include_financials === 'true' ? getBasicFinancials(ticker).catch(() => null) : Promise.resolve(null),
+          args.include_insider === 'true' ? getInsiderTransactions(ticker).catch(() => null) : Promise.resolve(null),
+        ]);
+
         let result = `*${profile.name}* (${profile.ticker})\n`;
         result += `Industry: ${profile.industry} · Exchange: ${profile.exchange}\n`;
         result += `Market Cap: $${(profile.marketCap / 1000).toFixed(1)}B · IPO: ${profile.ipo || 'N/A'}\n`;
 
-        if (args.include_financials === 'true') {
-          const fin = await getBasicFinancials(ticker);
+        if (fin) {
           result += `\nKey metrics:\n`;
           result += `- P/E (TTM): ${fin.peRatio}\n- P/B: ${fin.pbRatio}\n`;
           result += `- Gross Margin: ${fin.grossMarginTTM}%\n- Net Margin: ${fin.netProfitMarginTTM}%\n`;
           result += `- 52W High: $${fin.week52High} · Low: $${fin.week52Low}`;
         }
 
-        if (args.include_insider === 'true') {
-          const insider = await getInsiderTransactions(ticker);
+        if (insider) {
           result += `\n\nRecent insider transactions:\n${insider}`;
         }
 

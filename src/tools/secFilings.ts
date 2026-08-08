@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getCache, setCache } from '../config/redis';
 
 const EDGAR_BASE = 'https://efts.sec.gov/LATEST/search-index';
 const EDGAR_SUBMISSIONS = 'https://data.sec.gov/submissions';
@@ -16,16 +17,23 @@ export async function getCIK(ticker: string): Promise<string | null> {
   const sym = ticker.toUpperCase();
   if (tickerToCIK[sym]) return tickerToCIK[sym];
 
+  const cached = await getCache<string>(`cik:${sym}`);
+  if (cached) {
+    tickerToCIK[sym] = cached;
+    return cached;
+  }
+
   try {
     const { data } = await axios.get(
       'https://www.sec.gov/files/company_tickers.json',
-      { headers: HEADERS }
+      { headers: HEADERS, timeout: 5000 }
     );
 
     for (const entry of Object.values(data) as { cik_str: number; ticker: string; title: string }[]) {
       if (entry.ticker.toUpperCase() === sym) {
         const cik = String(entry.cik_str).padStart(10, '0');
         tickerToCIK[sym] = cik;
+        await setCache(`cik:${sym}`, cik, 86400 * 7); // 7 days TTL
         return cik;
       }
     }
@@ -49,11 +57,17 @@ export async function getRecentFilings(
   formTypes: string[] = ['10-K', '10-Q', '8-K'],
   limit = 5
 ): Promise<FilingItem[]> {
+  const sym = ticker.toUpperCase();
+  const cacheKey = `sec:${sym}:${formTypes.join(',')}:${limit}`;
+  const cached = await getCache<FilingItem[]>(cacheKey);
+  if (cached) return cached;
+
   const cik = await getCIK(ticker);
   if (!cik) throw new Error(`Could not find CIK for ticker ${ticker}`);
 
   const { data } = await axios.get(`${EDGAR_SUBMISSIONS}/CIK${cik}.json`, {
     headers: HEADERS,
+    timeout: 5000,
   });
 
   const filings = data.filings?.recent;
@@ -74,6 +88,7 @@ export async function getRecentFilings(
     }
   }
 
+  await setCache(cacheKey, results, 3600); // 1 hour TTL
   return results;
 }
 
@@ -91,6 +106,10 @@ export async function searchFilings(
   formTypes: string[] = ['10-K', '10-Q', '8-K'],
   limit = 5
 ): Promise<FullTextResult[]> {
+  const cacheKey = `secsearch:${query}:${formTypes.join(',')}:${limit}`;
+  const cached = await getCache<FullTextResult[]>(cacheKey);
+  if (cached) return cached;
+
   const params = new URLSearchParams({
     q: `"${query}"`,
     dateRange: 'custom',
@@ -102,12 +121,12 @@ export async function searchFilings(
 
   const { data } = await axios.get(
     `https://efts.sec.gov/LATEST/search-index?${params.toString()}`,
-    { headers: HEADERS }
+    { headers: HEADERS, timeout: 5000 }
   );
 
   const hits = data?.hits?.hits || [];
 
-  return hits.map(
+  const results: FullTextResult[] = hits.map(
     (h: {
       _source: {
         entity_name: string;
@@ -124,6 +143,9 @@ export async function searchFilings(
       description: h._source.period_of_report,
     })
   );
+
+  await setCache(cacheKey, results, 3600); // 1 hour TTL
+  return results;
 }
 
 // ─── Get filing text content for RAG / diff ──────────────────────────────────

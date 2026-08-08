@@ -494,17 +494,19 @@ async function callGroqStream(
 // ─── Dynamic Model Router (Fast 8B for chat/quotes vs 70B for deep research) ────
 export function selectOptimalModel(userQuery: string): string {
   const q = userQuery.toLowerCase();
+  const wordCount = userQuery.trim().split(/\s+/).length;
+
   const deepResearchKeywords = [
-    'compare', 'comparison', 'versus', ' vs ',
-    'analyze', 'analysis', 'deep dive',
-    'valuation', 'dcf', 'financial statement',
-    'balance sheet', 'income statement', 'cash flow',
+    'deep dive', 'valuation model', 'dcf',
+    'financial statement', 'balance sheet', 'income statement', 'cash flow statement',
     '10-k', '10-q', 'sec filing', 'annual report',
-    'audit', 'risk factors', 'forecast',
+    'audit report', 'risk factors', 'forecast model',
   ];
 
-  const isDeepQuery = deepResearchKeywords.some((keyword) => q.includes(keyword));
-  return isDeepQuery ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+  const hasDeepKeyword = deepResearchKeywords.some((keyword) => q.includes(keyword));
+  const isLongComparison = wordCount > 10 && (q.includes('compare') || q.includes('versus') || q.includes(' vs '));
+
+  return (hasDeepKeyword || isLongComparison) ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
 }
 
 // ─── Public interface with multi-tier resilience fallback ───────────────────

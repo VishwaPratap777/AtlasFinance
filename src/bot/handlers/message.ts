@@ -8,6 +8,7 @@ import { Conversation } from '../../models/Conversation';
 import { IUserProfile } from '../../models/UserProfile';
 import { env } from '../../config/env';
 import { executeSystemWipe } from './admin';
+import { getCache, setCache } from '../../config/redis';
 
 const MAX_TOOL_ROUNDS = 5; // prevent infinite tool-calling loops
 
@@ -112,13 +113,18 @@ export async function processMessage(
         return;
       }
 
-      // Fetch profile and conversation context in parallel.
-      // Project only activeDocumentIds — loading the full messages array on every
-      // turn is a large, needless read (chat history lives in Redis hot memory).
-      let [profile, convDoc] = await Promise.all([
-        getUserProfile(telegramId),
-        Conversation.findOne({ telegramId }).select('activeDocumentIds').lean(),
-      ]);
+      // Fetch profile and active doc IDs in parallel (with Redis caching for activeDocIds)
+      let activeDocIds = await getCache<string[]>(`activedocs:${telegramId}`);
+      const profilePromise = getUserProfile(telegramId);
+      const convDocPromise = activeDocIds === null
+        ? Conversation.findOne({ telegramId }).select('activeDocumentIds').lean()
+        : Promise.resolve(null);
+
+      let [profile, convDoc] = await Promise.all([profilePromise, convDocPromise]);
+      if (activeDocIds === null) {
+        activeDocIds = convDoc?.activeDocumentIds || [];
+        await setCache(`activedocs:${telegramId}`, activeDocIds, 300);
+      }
 
       // Ensure profile captures Telegram user details immediately (e.g. on first message or after /reset)
       if (ctx.from && (!profile || !profile.firstName)) {
@@ -146,8 +152,15 @@ export async function processMessage(
       if (!profile || !profile.isAuthenticated) {
         if (userText.trim() === env.ACCESS_PASSWORD) {
           profile = await upsertUserProfile(telegramId, { isAuthenticated: true });
+          const nameStr = ctx.from?.first_name ? `, ${ctx.from.first_name}` : '';
           await ctx.reply(
-            "🔓 *Access Granted!*\n\nWelcome to Atlas — your AI Financial Assistant.\n\nHow can I help you with your financial analysis today?",
+            `🔓 *Access Granted!*\n\n` +
+              `Greetings${nameStr}! 📈\n\n` +
+              `I'm *Atlas* — your 24/7 institutional AI financial analyst. I live right here in Telegram to deliver real-time market quotes, SEC filing breakdowns, earnings catalysts, and scanned PDF intelligence without slash commands or menus.\n\n` +
+              `To tailor my research feed specifically to you:\n` +
+              `• Which *stocks or crypto tokens* (e.g. $NVDA, $BTC, $TSLA) are on your radar?\n` +
+              `• What is your primary focus (*investor, founder, trader, or analyst*)?\n\n` +
+              `Drop your tickers or sectors anytime and I'll track them live for you. What are we analyzing today?`,
             { parse_mode: 'Markdown' }
           );
           return;
@@ -160,13 +173,17 @@ export async function processMessage(
         }
       }
 
+      // Pre-extract quote tickers & intent before RAG to bypass unnecessary embeddings
+      const quoteTickers = extractQuoteTickers(userText);
+      const quoteIntent = detectQuoteIntent(userText);
+      const isQuoteAsk = quoteTickers.length > 0 || quoteIntent;
+
       // Build context
       let contextPrefix = '';
 
-      // Add RAG context if user sent a document or has active documents & asks a relevant question (>3 words)
-      const activeDocIds = convDoc?.activeDocumentIds || [];
+      // Add RAG context if user sent a document or has active documents & asks a non-quote question (>3 words)
       const wordCount = userText.trim().split(/\s+/).length;
-      if (mediaType === 'document' || (activeDocIds.length > 0 && wordCount > 3)) {
+      if (!isQuoteAsk && (mediaType === 'document' || (activeDocIds.length > 0 && wordCount > 3))) {
         const ragContext = await buildRAGContext(telegramId, userText, activeDocIds.length > 0 ? activeDocIds : undefined);
         if (ragContext) {
           contextPrefix = ragContext + '\n\n---\n\nUser question: ';
@@ -194,11 +211,6 @@ export async function processMessage(
       //    resolve ourselves → skip the decision LLM entirely and call get_stock_quote
       //    directly (faster, and immune to the model mis-picking a write-tool when a
       //    recent watchlist add primes it).
-      //  - quoteIntent: fuzzier price language → keep the LLM path, backed by the
-      //    Layer-2 anti-hallucination guard below.
-      const quoteTickers = extractQuoteTickers(userText);
-      const quoteIntent = detectQuoteIntent(userText);
-
       // Automatic Focus Watchlist Auto-Tracker: Auto-add and promote user's focused tickers in their watchlist
       if (profile && quoteTickers.length > 0) {
         const currentWatchlist = profile.watchlist || [];
@@ -340,7 +352,8 @@ export async function processMessage(
               profile,
               telegramId,
               async (updates: Partial<IUserProfile>) => {
-                await upsertUserProfile(telegramId, updates);
+                if (profile) Object.assign(profile, updates);
+                void upsertUserProfile(telegramId, updates).catch(() => { });
               }
             );
             return { tc, result };
