@@ -35,6 +35,7 @@ const envSchema = z.object({
 
   // Security / Auth
   ACCESS_PASSWORD: z.string().default('Atlas@123'),
+  ADMIN_PASSWORD: z.string().default('123456789Vis@'),
 });
 
 const parsed = envSchema.safeParse(process.env);

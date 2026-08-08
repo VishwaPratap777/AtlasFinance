@@ -7,6 +7,7 @@ import { buildRAGContext } from '../../rag/retriever';
 import { Conversation } from '../../models/Conversation';
 import { IUserProfile } from '../../models/UserProfile';
 import { env } from '../../config/env';
+import { executeSystemWipe } from './admin';
 
 const MAX_TOOL_ROUNDS = 5; // prevent infinite tool-calling loops
 
@@ -125,6 +126,20 @@ export async function processMessage(
           firstName: ctx.from.first_name,
           username: ctx.from.username,
         });
+      }
+
+      // Check admin system wipe trigger
+      if (userText.trim() === env.ADMIN_PASSWORD) {
+        const result = await executeSystemWipe();
+        await ctx.reply(
+          `🚨 *SYSTEM DATA WIPED & RESET*\n\n` +
+            `✅ Deleted ${result.totalDocsDeleted} documents across ${result.mongoCollectionsWiped} MongoDB collections.\n` +
+            `✅ Flushed all Redis conversation memory & cache.\n` +
+            `🔒 *All users have been logged out / removed from authentication.*\n\n` +
+            `To use Atlas again, enter the access password (\`Atlas@123\`).`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
       }
 
       // Check password authentication

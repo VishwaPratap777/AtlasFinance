@@ -11,9 +11,36 @@ import { DocumentChunk } from '../models/DocumentChunk';
 
 import { clearRedisHistory } from '../config/redis';
 import { getUserProfile } from '../orchestrator/conversation';
+import { executeSystemWipe } from './handlers/admin';
 
 export function createBot(): Telegraf {
   const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
+
+  // ─── Admin Clear Command (Full System Wipe) ──────────────────────────────
+  bot.command('clear', async (ctx) => {
+    const text = ctx.message.text?.trim() || '';
+    const parts = text.split(/\s+/);
+    const passwordArg = parts[1];
+
+    if (passwordArg === env.ADMIN_PASSWORD) {
+      const result = await executeSystemWipe();
+      await ctx.reply(
+        `🚨 *SYSTEM DATA WIPED & RESET*\n\n` +
+          `✅ Deleted ${result.totalDocsDeleted} documents across ${result.mongoCollectionsWiped} MongoDB collections.\n` +
+          `✅ Flushed all Redis conversation memory & cache.\n` +
+          `🔒 *All users have been logged out / removed from authentication.*\n\n` +
+          `Enter password to start fresh!`,
+        { parse_mode: 'Markdown' }
+      );
+    } else {
+      await ctx.reply(
+        "⚠️ *Admin Clear Command*\n\n" +
+          "This command will permanently wipe all MongoDB data, flush Redis cache, and log out all users.\n\n" +
+          "To proceed, please enter:\n`/clear 123456789Vis@`\nor send the admin password in chat.",
+        { parse_mode: 'Markdown' }
+      );
+    }
+  });
 
   // ─── Reset Command (testing helper) ────────────────────────────────────────
   bot.command('reset', async (ctx) => {

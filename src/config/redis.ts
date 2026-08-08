@@ -71,6 +71,18 @@ export async function clearRedisHistory(telegramId: number): Promise<void> {
   }
 }
 
+// ─── Flush All Redis Data (System Admin Clear) ────────────────────────────────
+export async function flushAllRedisData(): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.flushall();
+    console.log('[Redis] Complete flushall executed successfully.');
+  } catch (err) {
+    console.warn('[Redis] Flushall error:', (err as Error).message);
+  }
+}
+
+
 // ─── Generic 60-90s Response & API Quote Cache ──────────────────────────────
 export async function getCache<T>(key: string): Promise<T | null> {
   if (!redis) return null;
