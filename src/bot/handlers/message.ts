@@ -17,7 +17,6 @@ const MAX_TOOL_ROUNDS = 5; // prevent infinite tool-calling loops
 const SIDE_EFFECT_TOOLS = new Set<string>([
   'update_user_watchlist',
   'update_user_portfolio',
-  'set_briefing_preference',
 ]);
 
 // Tools that fetch real market/company data. Used by the anti-hallucination backstop:

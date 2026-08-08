@@ -343,9 +343,10 @@ export async function executeTool(
         if (args.time) updates.briefingTime = args.time as string;
         if (args.timezone) updates.briefingTimezone = args.timezone as string;
         await onProfileUpdate(updates);
-        return args.enabled === 'true'
-          ? `Daily briefing scheduled for ${args.time || profile?.briefingTime || '08:00'} ${args.timezone || profile?.briefingTimezone || 'ET'}.`
-          : 'Daily briefing disabled.';
+        if (args.enabled === 'false') return 'Briefing preference updated: daily briefs disabled.';
+        const timeStr = args.time || profile?.briefingTime || '08:00';
+        const tzStr = args.timezone ? ` (${args.timezone})` : '';
+        return `Briefing preference updated: enabled for ${timeStr}${tzStr} delivered directly to Telegram.`;
       }
 
       case 'update_user_profile': {
