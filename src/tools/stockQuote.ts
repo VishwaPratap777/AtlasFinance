@@ -232,13 +232,8 @@ export function extractQuoteTickers(text: string): string[] {
   if (!text) return [];
   const trimmed = text.trim();
 
-  // Any of these mean "not a plain quote" → defer to the LLM.
-  if (
-    SIDE_EFFECT_VERB_RE.test(trimmed) ||
-    OTHER_DATA_RE.test(trimmed) ||
-    EXPLAINER_RE.test(trimmed) ||
-    COMPARE_RE.test(trimmed)
-  ) {
+  // Only side-effect write verbs (add/remove watchlist) skip quote fast-path
+  if (SIDE_EFFECT_VERB_RE.test(trimmed)) {
     return [];
   }
 
