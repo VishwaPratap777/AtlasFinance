@@ -1,5 +1,5 @@
 import { formatQuote, QuoteResult } from '../src/tools/stockQuote';
-import { buildMessageHistory } from '../src/orchestrator/conversation';
+import { buildSystemPrompt } from '../src/orchestrator/conversation';
 import { executeTool } from '../src/orchestrator/tools';
 
 async function runCalibrationTests() {
@@ -29,8 +29,7 @@ async function runCalibrationTests() {
   console.log('✅ PASS: formatQuote renders 24h volume correctly');
 
   // Test 2: System prompt contains mandatory calibration & correlation rules
-  const history = await buildMessageHistory(12345, 'and LTC?', null);
-  const sysMsg = history.find((m) => m.role === 'system')?.content || '';
+  const sysMsg = buildSystemPrompt(null);
 
   if (!sysMsg.includes('Recent ETF inflows provide a positive institutional-demand signal.')) {
     console.error('❌ FAIL: System prompt missing mandatory ETF inflow calibration rule!');
