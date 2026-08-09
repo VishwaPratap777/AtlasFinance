@@ -433,10 +433,13 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize these results for the user:
-- If asked about PATTERNS or TRENDS: synthesize retrieved evidence into a pattern (Pattern → Verified Evidence Bullets → What it Suggests → Why it Matters). Use news only as supporting context. Do NOT invent volume, relative strength, or technical levels. If data is insufficient, state what evidence is missing.
-- If RICH verified news/catalysts exist (e.g. BTC): deliver full analytical depth — stat card, verified news bullets, "Why it matters" synthesis, and actionable next steps.
-- If NO verified news/catalysts exist (e.g. LTC): present the stat card, report available price/range data, state plainly that no verified news/catalyst was identified in the feed, and stop naturally. NEVER speculate on why news is absent, infer market sentiment or positioning from zero news, or give investment advice.`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize these results into an intent-aware response:
+1. Identify INTENT & PRIORITIZE EVIDENCE:
+   - Pattern/Trend ask ("patterns", "trends") -> Prioritize historical price ranges & relative performance ('get_price_history'). News is secondary context. Structure: THESIS (Pattern) -> 2-4 supporting evidence bullets -> calibrated interpretation -> why it matters -> next step.
+   - Catalyst ask ("why is it moving", "what happened") -> Prioritize verified news & catalysts ('get_company_news'). Quote confirms move size. Structure: THESIS (Driver) -> verified news bullets -> why it matters.
+   - Snapshot ask ("how is X") -> Stat card + verified evidence (follow 3-Tier Spectrum: Rich vs Limited vs Quiet asset).
+   - Comparison ask ("compare X and Y") -> Side-by-side stat cards -> comparative matrix -> executive verdict.
+2. Structure: THESIS -> 2-4 SUPPORTING FACTS -> CALIBRATED INTERPRETATION -> WHY IT MATTERS -> OPTIONAL NEXT STEP. Never dump raw news or repeat disclaimer templates.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
