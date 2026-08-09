@@ -285,7 +285,7 @@ export async function executeTool(
           });
 
           if (filtered.length === 0) {
-            return `[Crypto News — ${baseTicker}]: No verified news for ${baseTicker} (${fullName}) was found in the current crypto news feed. No clear catalyst was identified from the available data.`;
+            return `[Crypto News — ${baseTicker}]: No asset-specific news headlines found for ${baseTicker} (${fullName}) in the past 3 days.`;
           }
           // Label results so the LLM knows this is crypto-category news, not equity filings.
           return `[Crypto News — ${baseTicker}]:\n` + formatNewsItems(filtered, 5);

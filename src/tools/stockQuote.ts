@@ -450,6 +450,6 @@ export function formatQuote(q: QuoteResult): string {
     `*${q.ticker}* · ${cur}${fmt(q.price)} · ${dir} ${sign}${q.changePercent.toFixed(2)}% (${sign}${cur}${fmt(q.change)})\n` +
     `• 24h Range: ${cur}${fmt(q.low)} – ${cur}${fmt(q.high)}\n` +
     `• Prev Close: ${cur}${fmt(q.previousClose)}\n` +
-    `[context: 24h move is ${moveTag} (${absPct.toFixed(2)}%); 24h range is intraday only — not support/resistance]`
+    `[context: 24h move magnitude is ${moveTag} (${absPct.toFixed(2)}%)]`
   );
 }

@@ -97,6 +97,10 @@ export function sanitizeLLMOutput(text: string): string {
     .replace(/<[a-zA-Z_0-9\-=\/]+[^>]*>/gi, '')
     // Remove JSON profile/state leaks
     .replace(/\{"(role|sectors|watchlist|portfolio|onboarding)"[\s\S]*?\}/gi, '')
+    // Remove internal metadata tags if leaked in output
+    .replace(/^\[(?:context|Asset Note|Crypto News)[^\]\n]*\]:?\s*/gmi, '')
+    // Remove unsolicited trailing conversational questions ("What do you think...?")
+    .replace(/\n+What do you think[^\n?]*\??$/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
