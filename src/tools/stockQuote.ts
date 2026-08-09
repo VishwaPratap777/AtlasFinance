@@ -17,6 +17,7 @@ export interface QuoteResult {
   low: number;
   open: number;
   previousClose: number;
+  volume?: number;
   timestamp: string;
 }
 
@@ -300,6 +301,8 @@ async function fetchBinanceCrypto(rawSymbol: string): Promise<QuoteResult | null
       const open = parseFloat(data.openPrice);
       const previousClose = parseFloat(data.prevClosePrice);
 
+      const volume = data.quoteVolume ? parseFloat(data.quoteVolume) : (data.volume ? parseFloat(data.volume) : undefined);
+
       return {
         ticker: `${base}-USD`,
         price,
@@ -309,6 +312,7 @@ async function fetchBinanceCrypto(rawSymbol: string): Promise<QuoteResult | null
         low,
         open,
         previousClose,
+        volume,
         timestamp: new Date().toISOString(),
       };
     }
@@ -425,6 +429,7 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
       low: yahooData.fiftyTwoWeekLow || yahooData.price,
       open: yahooData.price,
       previousClose: yahooData.price / (1 + (yahooData.changePercent || 0) / 100),
+      volume: yahooData.averageVolume,
       timestamp: new Date().toISOString(),
     };
     await setCache(`quote:${symbol}`, res, 75);
@@ -439,6 +444,13 @@ export async function getQuote(ticker: string): Promise<QuoteResult> {
     }
     throw err;
   }
+}
+
+function formatVolume(vol: number): string {
+  if (vol >= 1e9) return `~$${(vol / 1e9).toFixed(2)}B`;
+  if (vol >= 1e6) return `~$${(vol / 1e6).toFixed(1)}M`;
+  if (vol >= 1e3) return `~$${(vol / 1e3).toFixed(1)}K`;
+  return `~$${vol.toFixed(0)}`;
 }
 
 // Format quote for Telegram display
@@ -456,9 +468,12 @@ export function formatQuote(q: QuoteResult): string {
   else if (absPct < 7) moveTag = 'notable';
   else moveTag = 'major';
 
+  const volLine = q.volume && q.volume > 0 ? `• 24h Volume: ${formatVolume(q.volume)}\n` : '';
+
   return (
     `*${q.ticker}* · ${cur}${fmt(q.price)} · ${dir} ${sign}${q.changePercent.toFixed(2)}% (${sign}${cur}${fmt(q.change)})\n` +
     `• 24h Range: ${cur}${fmt(q.low)} – ${cur}${fmt(q.high)}\n` +
+    volLine +
     `• Prev Close: ${cur}${fmt(q.previousClose)}\n` +
     `[context: 24h move magnitude is ${moveTag} (${absPct.toFixed(2)}%)]`
   );
