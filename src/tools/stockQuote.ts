@@ -211,21 +211,13 @@ const MAX_FAST_PATH_TICKERS = 5;
 
 /**
  * Deterministically resolves EVERY ticker named in a clean price ask, so the caller can
- * call get_stock_quote for each and skip the decision LLM entirely. Returns [] the moment
- * the turn looks like anything else (a state change, a different data type, an explainer,
- * or a comparison), in which case the caller falls back to the LLM tool-routing path.
- *
- * This exists because the decision LLM (fast 8B) both (a) adds a full round-trip of
- * latency and (b) mis-picks the tool when recent history primes it — e.g. answering
- * "what about SOL and LTC?" with update_user_watchlist right after a watchlist add.
- * Handling multiple assets here is what stops two-coin queries from misfiring: naming
- * two assets used to bail to the LLM, which is exactly where the wrong tool got picked.
+ * call get_stock_quote for each and skip the decision LLM entirely.
  */
 export function extractQuoteTickers(text: string): string[] {
   if (!text) return [];
   const trimmed = text.trim();
 
-  // Side-effect write verbs defer to LLM tool routing
+  // Side-effect write verbs (add to watchlist, clear portfolio) defer to LLM write tools
   if (SIDE_EFFECT_VERB_RE.test(trimmed)) {
     return [];
   }
@@ -263,27 +255,12 @@ export function extractQuoteTickers(text: string): string[] {
     }
   }
 
-  // 5. Lone caps-shaped tokens the USER typed (real tickers like NVDA, BTCUSD). Matched against
-  //    the ORIGINAL text, never the uppercased copy — otherwise every ordinary word
-  //    ("about", "price", "doing") would look like a ticker.
+  // 5. Lone caps-shaped tokens the USER typed (real tickers like NVDA, BTCUSD).
   for (const c of trimmed.match(/\b[A-Z]{2,7}\b/g) || []) {
     if (!TICKER_STOPWORDS.has(c)) push(c);
   }
 
   if (found.length === 0) return [];
-
-  // Confirm it reads as a price/market ask or comparison. Any of:
-  //  - explicit quote language ("price", "doing", "worth", …)
-  //  - a comparison ask ("compare", "vs")
-  //  - a "what/how about X" follow-up
-  //  - the message is essentially just the tickers plus a word or two of filler
-  const wordCount = trimmed.split(/\s+/).length;
-  const isPriceAsk =
-    QUOTE_INTENT_RE.test(trimmed) ||
-    FOLLOWUP_RE.test(trimmed) ||
-    COMPARE_RE.test(trimmed) ||
-    wordCount - found.length <= 2;
-  if (!isPriceAsk) return [];
 
   return found.slice(0, MAX_FAST_PATH_TICKERS);
 }

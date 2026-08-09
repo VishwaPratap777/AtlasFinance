@@ -382,17 +382,7 @@ export async function processMessage(
           break;
         }
 
-        // If tool calls were made, clear any intermediate streaming message so raw tool status text (e.g. "Update user profile:") is never displayed.
-        if (streamMessage && ctx.chat?.id) {
-          try {
-            await ctx.telegram.deleteMessage(ctx.chat.id, streamMessage.message_id);
-            streamMessage = null;
-          } catch {
-            console.warn('[MessageHandler] Could not delete intermediate stream message; keeping reference for in-place overwrite.');
-          }
-        }
-
-        // Keep the typing indicator alive without blocking tool execution.
+        // Keep streamMessage intact across rounds so final response edits in-place (prevents duplicate messages)
         ctx.sendChatAction('typing').catch(() => { });
 
         // Execute this round's tool calls in parallel — they're independent lookups.
