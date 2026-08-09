@@ -422,26 +422,25 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into a clean Telegram-friendly briefing (Bold Takeaway -> 2-4 Bullets -> Single Concluding Sentence):
-MANDATORY LAYOUT (ALWAYS INCLUDE BULLETS & NUMBERS):
-**Short bold opening takeaway sentence**
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into a clean institutional-grade analyst briefing matching this exact layout:
 
-• Current: Price & 24h % move
-• 30-day: Return & peer comparisons (if historical data present)
-• Volume: 24h volume (if available)
-• Catalysts: Verified asset-specific news status (only if relevant)
+**[Natural bold opening headline stating asset status, current price level, and market action]**
 
-One short concluding sentence stating the strongest supported interpretation (STOP THERE, NO forced headers, NO walls of text).
-NEVER emit a bare 1-sentence response without bullets or numbers!
+• Current price: $X, [calibrated move description] (+$X / +X% over 24h).
+• 24-hour volume: ~$X, [volume/activity context].
+• Technical context: [30-day trend, start/end range, and peer comparison].
+• Catalyst: [Verified DIRECT asset news ONLY — OMIT bullet entirely if news is about another asset like BTC].
 
-DATA INTEGRITY RULES:
-- ZERO METRIC LEAKAGE: Bind every metric strictly to its exact target ticker. BTC volume must NEVER appear under SOL or ETH!
-- FRESH TOOL DATA PRIMACY: Source numbers strictly from the current turn's tool output. Never carry forward stale historical numbers or reuse values from other assets in context.
-- INDEPENDENT RECORDS: Treat each asset as an independent record (TICKER: Price | 24h % | Volume | 30d Return). Compare equivalent 30d timeframes.
-- FIND STRONGEST SIGNAL: A flat 24h move does NOT make data uninterpretable. Emphasize 30d trend or relative strength.
-- SIGNED NUMBERS: +10.2% > +3.1% > -5.8%. Verify ordering (+10.2% outpaces +3.1% and -5.8%).
-- BANNED FILLER: Never say "Monitor closely", "may be a precursor to fluctuations", "difficult to interpret".
-- TOOL ERRORS: NEVER mention tool names or API errors. Omit missing data silently.`,
+Why it matters: [1-2 sentences explaining market regime, structural significance, and relative positioning].
+
+→ [Actionable next-step prompt 1]
+→ [Actionable next-step prompt 2]
+
+CRITICAL RULES:
+- ABSOLUTE NEWS ISOLATION: Bitcoin news (e.g. BIP-110, BTC mining) MUST NEVER appear inside an ETH, SOL, or altcoin response! Omit the Catalyst bullet if no direct asset news exists.
+- ZERO METRIC LEAKAGE: Bind every metric strictly to its exact target ticker.
+- ALWAYS INCLUDE "Why it matters:" section.
+- ALWAYS INCLUDE 1-2 "→" actionable next steps.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
