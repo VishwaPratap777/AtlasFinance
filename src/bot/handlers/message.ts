@@ -322,11 +322,11 @@ export async function processMessage(
           const isNewsAsk = /\b(news|on with|up with|happening|update|developments?)\b/i.test(userText);
           const isCompareAsk = /\b(compare|versus|vs|difference|or)\b/i.test(userText);
           const isPatternAsk = /\b(pattern|patterns|trend|trends|consolidation|range|technical|technicals|structure|momentum|breakout|support|resistance)\b/i.test(userText);
+          const isEarningsAsk = /\b(earnings|quarterly|eps|revenue|guidance|report|results|surprise|calendar)\b/i.test(userText);
 
           const toolCalls = resolvedTickers.flatMap((ticker) => {
             const list: { name: string; args: Record<string, unknown> }[] = [
               { name: 'get_stock_quote', args: { ticker } },
-              // Always fetch recent news so the model has catalysts/context beyond the 24h price move.
               { name: 'get_company_news', args: { ticker, days: '3' } },
             ];
             if (isCompareAsk) {
@@ -334,6 +334,9 @@ export async function processMessage(
             }
             if (isPatternAsk) {
               list.push({ name: 'get_price_history', args: { ticker, period: '1mo' } });
+            }
+            if (isEarningsAsk) {
+              list.push({ name: 'get_earnings_history', args: { ticker } });
             }
             return list;
           });
