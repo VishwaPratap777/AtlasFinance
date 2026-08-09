@@ -311,11 +311,7 @@ export async function processMessage(
         // instant a tool call is chosen, so streaming it just burns Telegram edit calls.
         const onChunk = isDecisionRound ? undefined : streamChunk;
 
-        // On a deep-research query the decision round runs on fast 8B purely to pick tools.
-        // If it answers directly (no tool), we regenerate on 70B just below — so cap its
-        // tokens to stop it spending time writing a full answer we're about to throw away.
-        const roundMaxTokens =
-          isDecisionRound && routedModel !== DECISION_MODEL ? 160 : undefined;
+        const roundMaxTokens = undefined;
 
         let response;
         if (isDecisionRound && resolvedTickers.length > 0) {
