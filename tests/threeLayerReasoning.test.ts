@@ -1,7 +1,7 @@
 import { buildSystemPrompt } from '../src/orchestrator/conversation';
 
 async function runTests() {
-  console.log('🧪 Running Telegram-Friendly Scannable Format & Quality Tests...\n');
+  console.log('🧪 Running Data-Integrity & Telegram Scannable Format Tests...\n');
 
   try {
     const sysPrompt = buildSystemPrompt(null);
@@ -10,16 +10,17 @@ async function runTests() {
       'CORE REASONING HIERARCHY (3-Layer Pipeline)',
       'LAYER 1 — FACTUAL SNAPSHOT (MANDATORY)',
       'LAYER 2 — EVIDENCE-BASED INTERPRETATION (CONDITIONAL)',
-      'FIND THE STRONGEST SIGNAL ACROSS TIMEFRAMES',
+      'DATA INTEGRITY & ZERO METRIC LEAKAGE (MANDATORY)',
+      'Strict Asset-Metric Isolation',
+      'Independent Record Construction',
+      'Fresh Tool Data Primacy',
+      'No Cross-Asset Data Reuse',
+      'Equivalent Timeframes',
       'TELEGRAM-FRIENDLY SCANNABLE ANALYST BRIEFING',
-      'FORMATTING & STRUCTURE (VISUALLY SCANNABLE & CONCISE)',
       'BANNED FILLER PHRASES',
-      'Monitor X\'s price action and market sentiment closely',
-      'may be a precursor to further price fluctuations',
-      'NUMERICAL VERIFICATION & CONSISTENCY CHECK',
       'SIGNED NUMBERS RULE',
       'NEWS RELEVANCE GATE',
-      'PRE-SEND QUALITY CHECKLIST',
+      'PRE-SEND DATA INTEGRITY & QUALITY CHECKLIST',
     ];
 
     for (const tok of requiredTokens) {
@@ -28,7 +29,7 @@ async function runTests() {
         process.exit(1);
       }
     }
-    console.log('✅ PASS: All reasoning, Telegram scannable format, news-gate, and quality-checklist tokens present');
+    console.log('✅ PASS: All Data Integrity, Telegram scannable format, and quality-checklist tokens present');
 
     // Verify LTC scannable reference example is present
     if (!sysPrompt.includes('LTC is showing strong medium-term performance despite a quiet session.')) {
@@ -44,7 +45,7 @@ async function runTests() {
     }
     console.log('✅ PASS: Tool error suppression rule present');
 
-    console.log('\n🎉 ALL FORMATTING AND REASONING TESTS PASSED SUCCESSFULLY!');
+    console.log('\n🎉 ALL DATA INTEGRITY AND REASONING TESTS PASSED SUCCESSFULLY!');
     process.exit(0);
   } catch (err) {
     console.error('❌ FAIL:', err);

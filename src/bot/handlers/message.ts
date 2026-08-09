@@ -475,7 +475,10 @@ FORMAT:
 
 One short concluding sentence stating the strongest supported interpretation (STOP THERE, NO forced headers, NO walls of text).
 
-RULES:
+DATA INTEGRITY RULES:
+- ZERO METRIC LEAKAGE: Bind every metric strictly to its exact target ticker. BTC volume must NEVER appear under SOL or ETH!
+- FRESH TOOL DATA PRIMACY: Source numbers strictly from the current turn's tool output. Never carry forward stale historical numbers or reuse values from other assets in context.
+- INDEPENDENT RECORDS: Treat each asset as an independent record (TICKER: Price | 24h % | Volume | 30d Return). Compare equivalent 30d timeframes.
 - FIND STRONGEST SIGNAL: A flat 24h move does NOT make data uninterpretable. Emphasize 30d trend or relative strength.
 - SIGNED NUMBERS: +10.2% > +3.1% > -5.8%. Verify ordering (+10.2% outpaces +3.1% and -5.8%).
 - BANNED FILLER: Never say "Monitor closely", "may be a precursor to fluctuations", "difficult to interpret".
