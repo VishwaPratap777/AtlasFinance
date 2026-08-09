@@ -448,13 +448,12 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize these results into an intent-aware response:
-1. Identify INTENT & PRIORITIZE EVIDENCE:
-   - Pattern/Trend ask ("patterns", "trends") -> Prioritize historical price ranges & relative performance ('get_price_history'). News is secondary context. Structure: THESIS (Pattern) -> 2-4 supporting evidence bullets -> calibrated interpretation -> why it matters -> next step.
-   - Catalyst ask ("why is it moving", "what happened") -> Prioritize verified news & catalysts ('get_company_news'). Quote confirms move size. Structure: THESIS (Driver) -> verified news bullets -> why it matters.
-   - Snapshot ask ("how is X") -> Stat card + verified evidence (follow 3-Tier Spectrum: Rich vs Limited vs Quiet asset).
-   - Comparison ask ("compare X and Y") -> Side-by-side stat cards -> comparative matrix -> executive verdict.
-2. Structure: THESIS -> 2-4 SUPPORTING FACTS -> CALIBRATED INTERPRETATION -> WHY IT MATTERS -> OPTIONAL NEXT STEP. Never dump raw news or repeat disclaimer templates.`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into 3–4 short paragraphs of concise analyst prose (no headers, no labeled sections, no bullet-point stat cards):
+- Open with current price + today's move, then immediately state the 30-day trend conclusion and peer comparison in natural sentences.
+- Draw a conclusion from the data — state who is outperforming/underperforming and what it implies. Never list numbers without interpreting them.
+- If no verified catalyst exists, say so plainly and redirect to the 30-day relative trend as the meaningful signal.
+- Close with one "→" next-step line.
+- Keep it tight and conversational. Never use labeled sections like "Stat Card:", "30-Day Trend:", "Relative Context:", "Why It Matters:".`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
