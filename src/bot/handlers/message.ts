@@ -459,7 +459,7 @@ export async function processMessage(
 
       // Ensure any in-flight streaming message creation promise resolves before finalizing
       if (streamMessagePromise) {
-        await streamMessagePromise.catch(() => { });
+        await (streamMessagePromise as Promise<unknown>).catch(() => { });
       }
 
       // Send or finalize Telegram message — ALWAYS overwrite streamMessage in-place if it exists
