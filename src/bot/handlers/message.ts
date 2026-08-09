@@ -2,7 +2,7 @@ import { Context } from 'telegraf';
 import { chatStream, ChatMessage, selectOptimalModel, sanitizeLLMOutput } from '../../orchestrator/llm';
 import { buildMessageHistory, persistMessages, getUserProfile, upsertUserProfile } from '../../orchestrator/conversation';
 import { TOOL_DEFINITIONS, executeTool } from '../../orchestrator/tools';
-import { detectQuoteIntent, extractQuoteTickers } from '../../tools/stockQuote';
+import { detectQuoteIntent, extractQuoteTickers, KNOWN_CRYPTO } from '../../tools/stockQuote';
 import { buildRAGContext } from '../../rag/retriever';
 import { Conversation } from '../../models/Conversation';
 import { IUserProfile } from '../../models/UserProfile';
@@ -319,27 +319,39 @@ export async function processMessage(
 
         let response;
         if (isDecisionRound && resolvedTickers.length > 0) {
-          const isNewsAsk = /\b(news|on with|up with|happening|update|developments?)\b/i.test(userText);
           const isCompareAsk = /\b(compare|versus|vs|difference|or)\b/i.test(userText);
-          const isPatternAsk = /\b(pattern|patterns|trend|trends|consolidation|range|technical|technicals|structure|momentum|breakout|support|resistance)\b/i.test(userText);
           const isEarningsAsk = /\b(earnings|quarterly|eps|revenue|guidance|report|results|surprise|calendar)\b/i.test(userText);
 
-          const toolCalls = resolvedTickers.flatMap((ticker) => {
-            const list: { name: string; args: Record<string, unknown> }[] = [
-              { name: 'get_stock_quote', args: { ticker } },
-              { name: 'get_company_news', args: { ticker, days: '3' } },
-            ];
-            if (isCompareAsk) {
-              list.push({ name: 'get_company_profile', args: { ticker, include_financials: 'true' } });
+          const toolCalls: { name: string; args: Record<string, unknown> }[] = [];
+
+          for (const rawTicker of resolvedTickers) {
+            const clean = rawTicker.toUpperCase().trim();
+            const baseCrypto = clean.replace('-USD', '').replace(/USD$/, '');
+            const isCrypto = KNOWN_CRYPTO.has(clean) || KNOWN_CRYPTO.has(baseCrypto);
+
+            // 1. Primary quote & news
+            toolCalls.push({ name: 'get_stock_quote', args: { ticker: clean } });
+            toolCalls.push({ name: 'get_company_news', args: { ticker: clean, days: '3' } });
+
+            // 2. Always fetch 30-day price history for primary asset to get 30-day trend & low/high levels
+            toolCalls.push({ name: 'get_price_history', args: { ticker: clean, period: '1mo' } });
+
+            // 3. Always fetch 2-3 benchmark peers over the exact same 30-day window
+            const peers = isCrypto
+              ? baseCrypto === 'BTC' ? ['ETH-USD', 'SOL-USD'] : baseCrypto === 'ETH' ? ['BTC-USD', 'SOL-USD'] : ['BTC-USD', 'ETH-USD']
+              : ['SPY', 'QQQ'];
+
+            for (const peer of peers) {
+              toolCalls.push({ name: 'get_price_history', args: { ticker: peer, period: '1mo' } });
             }
-            if (isPatternAsk) {
-              list.push({ name: 'get_price_history', args: { ticker, period: '1mo' } });
+
+            if (isCompareAsk) {
+              toolCalls.push({ name: 'get_company_profile', args: { ticker: clean, include_financials: 'true' } });
             }
             if (isEarningsAsk) {
-              list.push({ name: 'get_earnings_history', args: { ticker } });
+              toolCalls.push({ name: 'get_earnings_history', args: { ticker: clean } });
             }
-            return list;
-          });
+          }
 
           response = {
             content: '',

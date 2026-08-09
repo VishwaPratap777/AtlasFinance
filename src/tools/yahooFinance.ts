@@ -26,10 +26,7 @@ export interface QuickSummary {
   description?: string;
 }
 
-const KNOWN_CRYPTO = new Set([
-  'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
-  'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI'
-]);
+import { KNOWN_CRYPTO } from './stockQuote';
 
 import axios from 'axios';
 
@@ -108,37 +105,88 @@ export async function getHistoricalReturn(
   ticker: string,
   period: '1mo' | '3mo' | '6mo' | '1y' | '2y' = '1y'
 ): Promise<string> {
-  const symbol = ticker.toUpperCase();
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const historical: any[] = await withTimeout(
-    yahooFinance.historical(symbol, {
-      period1: getPeriodStart(period),
-      interval: '1mo',
-    }),
-    6000,
-    'Yahoo historical'
-  );
-
-  if (!historical || historical.length < 2) {
-    return `Insufficient historical data for ${symbol}.`;
+  let symbol = ticker.toUpperCase().trim();
+  const baseCrypto = symbol.replace('-USD', '').replace(/USD$/, '');
+  if (KNOWN_CRYPTO.has(symbol) || KNOWN_CRYPTO.has(baseCrypto)) {
+    symbol = `${baseCrypto}-USD`;
   }
 
-  const first: number = historical[0].close;
-  const last: number = historical[historical.length - 1].close;
-  const returnPct = (((last - first) / first) * 100).toFixed(1);
-  const label: Record<string, string> = {
-    '1mo': '1 month', '3mo': '3 months', '6mo': '6 months', '1y': '1 year', '2y': '2 years',
-  };
+  // 1. Try Yahoo Chart V8 API first (fast & reliable)
+  try {
+    const rangeStr = period;
+    const { data } = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`, {
+      params: { interval: period === '1mo' ? '1d' : '1mo', range: rangeStr },
+      timeout: 3500,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
 
-  return `${symbol} ${label[period]} return: ${Number(returnPct) >= 0 ? '+' : ''}${returnPct}% ($${first.toFixed(2)} → $${last.toFixed(2)})`;
+    const quotes = data?.chart?.result?.[0]?.indicators?.quote?.[0];
+    const closes = (quotes?.close || []).filter((c: number | null) => c !== null && !isNaN(c) && c > 0);
+    const lows = (quotes?.low || []).filter((c: number | null) => c !== null && !isNaN(c) && c > 0);
+    const highs = (quotes?.high || []).filter((c: number | null) => c !== null && !isNaN(c) && c > 0);
+
+    if (closes.length >= 2) {
+      const first = closes[0];
+      const last = closes[closes.length - 1];
+      const returnPct = (((last - first) / first) * 100).toFixed(1);
+      const returnSign = Number(returnPct) >= 0 ? '+' : '';
+
+      if (period === '1mo') {
+        const low30d = lows.length > 0 ? Math.min(...lows) : first;
+        const high30d = highs.length > 0 ? Math.max(...highs) : last;
+        return `${symbol} 30-day trend: ${returnSign}${returnPct}% ($${first.toFixed(2)} → $${last.toFixed(2)}) | 30-day range: $${low30d.toFixed(2)} low to $${high30d.toFixed(2)} high`;
+      }
+
+      return `${symbol} ${period} return: ${returnSign}${returnPct}% ($${first.toFixed(2)} → $${last.toFixed(2)})`;
+    }
+  } catch {
+    // Fall through to yahooFinance library
+  }
+
+  // 2. Fallback to yahooFinance.historical library
+  try {
+    const startDate = getPeriodStartDate(period);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const historical: any[] = await withTimeout(
+      yahooFinance.historical(symbol, {
+        period1: startDate,
+        interval: period === '1mo' ? '1d' : '1mo',
+      }),
+      5000,
+      'Yahoo historical'
+    );
+
+    if (historical && historical.length >= 2) {
+      const first: number = historical[0].close || historical[0].open || 0;
+      const last: number = historical[historical.length - 1].close || 0;
+      if (first > 0 && last > 0) {
+        const returnPct = (((last - first) / first) * 100).toFixed(1);
+        const returnSign = Number(returnPct) >= 0 ? '+' : '';
+
+        if (period === '1mo') {
+          const lows = historical.map((b) => b.low || b.close || first).filter((n) => n > 0);
+          const highs = historical.map((b) => b.high || b.close || last).filter((n) => n > 0);
+          const low30d = Math.min(...lows);
+          const high30d = Math.max(...highs);
+          return `${symbol} 30-day trend: ${returnSign}${returnPct}% ($${first.toFixed(2)} → $${last.toFixed(2)}) | 30-day range: $${low30d.toFixed(2)} low to $${high30d.toFixed(2)} high`;
+        }
+        return `${symbol} ${period} return: ${returnSign}${returnPct}% ($${first.toFixed(2)} → $${last.toFixed(2)})`;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return `30-day historical trend data unavailable for ${symbol}.`;
 }
 
-function getPeriodStart(period: string): string {
+function getPeriodStartDate(period: string): Date {
   const now = new Date();
   const months: Record<string, number> = {
     '1mo': 1, '3mo': 3, '6mo': 6, '1y': 12, '2y': 24,
   };
   now.setMonth(now.getMonth() - (months[period] || 12));
-  return now.toISOString().split('T')[0];
+  return now;
 }

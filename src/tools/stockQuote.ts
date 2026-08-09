@@ -21,13 +21,20 @@ export interface QuoteResult {
 }
 
 export const KNOWN_CRYPTO = new Set([
-  'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
-  'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI',
-  'BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD', 'XRP-USD', 'ADA-USD',
-  'BTCUSD', 'ETHUSD', 'SOLUSD', 'DOGEUSD', 'XRPUSD', 'ADAUSD'
+  'BTC', 'ETH', 'BNB', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
+  'SHIB', 'MATIC', 'POL', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI',
+  'TON', 'LEO', 'DAI', 'LDO', 'ICP', 'KAS', 'ETC', 'XLM', 'STX', 'OKB',
+  'FIL', 'CRO', 'RENDER', 'INJ', 'AR', 'FET', 'HBAR', 'FDUSD', 'WIF', 'FLOKI',
+  'BONK', 'TIA', 'NOT', 'ORDI', 'JUP', 'SEI', 'RUNE', 'TAO', 'WLD',
+  'BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'DOGE-USD', 'XRP-USD', 'ADA-USD', 'AVAX-USD',
+  'BTCUSD', 'ETHUSD', 'BNBUSD', 'SOLUSD', 'DOGEUSD', 'XRPUSD', 'ADAUSD'
 ]);
 
 export const CRYPTO_NAME_MAP: Record<string, string> = {
+  BNB: 'BNB',
+  BINANCE: 'BNB',
+  BINANCECOIN: 'BNB',
+  'BINANCE COIN': 'BNB',
   BITCOIN: 'BTC',
   ETHEREUM: 'ETH',
   SOLANA: 'SOL',
@@ -41,6 +48,9 @@ export const CRYPTO_NAME_MAP: Record<string, string> = {
   PEPE: 'PEPE',
   UNISWAP: 'UNI',
   LITECOIN: 'LTC',
+  NEAR: 'NEAR',
+  SUI: 'SUI',
+  TONCOIN: 'TON',
 };
 
 // ─── Global ticker/index alias resolution ──────────────────────────────────────
