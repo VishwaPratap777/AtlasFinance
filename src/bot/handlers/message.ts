@@ -324,11 +324,11 @@ export async function processMessage(
 
           const toolCalls = resolvedTickers.flatMap((ticker) => {
             const list: { name: string; args: Record<string, unknown> }[] = [
-              { name: 'get_stock_quote', args: { ticker } }
+              { name: 'get_stock_quote', args: { ticker } },
+              // Always fetch recent news so the model has catalysts/context beyond the 24h
+              // price move. This is a parallel data fetch on existing tools — no extra LLM call.
+              { name: 'get_company_news', args: { ticker, days: '3' } },
             ];
-            if (isNewsAsk) {
-              list.push({ name: 'get_company_news', args: { ticker, days: '3' } });
-            }
             if (isCompareAsk) {
               list.push({ name: 'get_company_profile', args: { ticker, include_financials: 'true' } });
             }
@@ -430,7 +430,7 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nNow synthesize these results into a concise, insightful response for the user. Remember: explain why it matters, don't just dump the data.`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize these results into a concise, insightful response. Look across ALL the evidence — price data, news, historical context, broader market signals — and surface what is genuinely useful. If the price move is small, check whether the news or other data reveals something worth noting. Do not echo [context:] metadata lines. Explain why it matters, do not just restate the data.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
