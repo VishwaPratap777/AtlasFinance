@@ -204,10 +204,10 @@ export async function executeTool(
         // Entity Disambiguation: Prevent matching crypto assets to corporate stock profiles (e.g. LTC / Litecoin vs LTC Properties, Inc.)
         const isCrypto = KNOWN_CRYPTO.has(baseTicker) || KNOWN_CRYPTO.has(`${baseTicker}-USD`);
         if (isCrypto) {
-          const nameMap: Record<string, string> = { LTC: 'Litecoin', BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana', DOGE: 'Dogecoin' };
+          const nameMap: Record<string, string> = { LTC: 'Litecoin', BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana', DOGE: 'Dogecoin', XRP: 'Ripple', ADA: 'Cardano', AVAX: 'Avalanche' };
           const cryptoName = nameMap[baseTicker] || baseTicker;
-          return `[Asset Note]: ${baseTicker} (${cryptoName}) is a decentralized cryptocurrency asset, not a corporate equity.\n` +
-                 `(Note: If you intended to query the US REIT stock LTC Properties, Inc., specify equity symbol LTC Properties).`;
+          // NOTE: Do NOT redirect the user to LTC Properties or any other equity — the user asked about crypto.
+          return `[Asset Note]: ${baseTicker} (${cryptoName}) is a decentralized cryptocurrency. Company profile, SEC filings, EPS, dividends, and equity fundamentals do NOT apply. Use get_stock_quote for current price data and get_company_news for recent crypto-category headlines.`;
         }
 
         const [profile, fin, insider] = await Promise.all([
@@ -263,19 +263,32 @@ export async function executeTool(
         const isCrypto = KNOWN_CRYPTO.has(baseTicker) || KNOWN_CRYPTO.has(`${baseTicker}-USD`);
 
         if (isCrypto) {
+          // For crypto tickers, fetch broad crypto-category market news from Finnhub
+          // then filter strictly: headline OR summary must contain the base ticker symbol
+          // OR a known full name. This prevents equity/REIT/SEC news leaking into crypto responses.
           const cryptoNews = await getMarketNews('crypto');
-          const nameMap: Record<string, string> = { LTC: 'LITECOIN', BTC: 'BITCOIN', ETH: 'ETHEREUM', SOL: 'SOLANA', DOGE: 'DOGECOIN' };
+          const nameMap: Record<string, string> = {
+            LTC: 'LITECOIN', BTC: 'BITCOIN', ETH: 'ETHEREUM', SOL: 'SOLANA',
+            DOGE: 'DOGECOIN', XRP: 'RIPPLE', ADA: 'CARDANO', AVAX: 'AVALANCHE',
+            LINK: 'CHAINLINK', MATIC: 'POLYGON', SHIB: 'SHIBA', UNI: 'UNISWAP',
+          };
           const fullName = nameMap[baseTicker] || baseTicker;
-          
+
           const filtered = cryptoNews.filter((item) => {
-            const text = `${item.headline} ${item.summary}`.toUpperCase();
-            return text.includes(baseTicker) || text.includes(fullName);
+            const headline = item.headline.toUpperCase();
+            const summary = item.summary.toUpperCase();
+            // Require the ticker symbol OR full name to appear in headline or summary.
+            // Also reject items whose "related" field links to a different asset class.
+            const matchesTicker = headline.includes(baseTicker) || summary.includes(baseTicker);
+            const matchesName  = headline.includes(fullName)   || summary.includes(fullName);
+            return matchesTicker || matchesName;
           });
 
           if (filtered.length === 0) {
-            return `No clear catalyst or verified news was identified for ${baseTicker} from the available data feeds.`;
+            return `[Crypto News — ${baseTicker}]: No verified news for ${baseTicker} (${fullName}) was found in the current crypto news feed. No clear catalyst was identified from the available data.`;
           }
-          return formatNewsItems(filtered, 5);
+          // Label results so the LLM knows this is crypto-category news, not equity filings.
+          return `[Crypto News — ${baseTicker}]:\n` + formatNewsItems(filtered, 5);
         }
 
         const days = parseInt((args.days as string) || '3');

@@ -437,9 +437,11 @@ export function formatQuote(q: QuoteResult): string {
   const sign = q.changePercent >= 0 ? '+' : '';
   const cur = getCurrencySymbol(q.ticker);
   const fmt = (n: number) => (n >= 1000 ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : n.toFixed(2));
+  // NOTE: Day Range is the 24h intraday high/low — NOT multi-week support/resistance.
+  // Label it explicitly so the LLM does not misinterpret it as a technical level.
   return (
     `*${q.ticker}* · ${cur}${fmt(q.price)} · ${dir} ${sign}${q.changePercent.toFixed(2)}% (${sign}${cur}${fmt(q.change)})\n` +
-    `• **Day Range**: ${cur}${fmt(q.low)} – ${cur}${fmt(q.high)}\n` +
+    `• **24h Range** (intraday only, not resistance/support): ${cur}${fmt(q.low)} – ${cur}${fmt(q.high)}\n` +
     `• **Prev Close**: ${cur}${fmt(q.previousClose)}`
   );
 }
