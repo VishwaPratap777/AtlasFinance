@@ -464,12 +464,12 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into concise analyst research (identifying the MARKET REGIME, supporting metrics, and WHY IT MATTERS):
-1. MARKET REGIME: Open with the evidence-backed Market Regime (e.g. consolidation, trend, recovery, relative strength) when data supports it.
-2. NUMERICAL VERIFICATION: Verify every comparative claim against the exact numbers retrieved before outputting. NEVER say "outperformed both" if any comparator has a higher return.
-3. STRICT GROUNDING: Every conclusion must be directly traceable to retrieved data. NEVER infer investor optimism from price rises or lost momentum from dips without explicit evidence. Ignore tool errors for non-existent/typo tickers and focus cleanly on valid retrieved asset data.
-4. WHY IT MATTERS: Conclude with 1 concise sentence explaining the structural market significance.
-5. Close with one "→" next-step line.`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into natural sell-side analyst prose using the 3-Layer Financial Reasoning Model (NO FORCED SECTION HEADERS):
+1. LAYER 1 — FACTUAL SNAPSHOT (MANDATORY): Always state all relevant retrieved numbers (Current price, 24h %, 30-day return, 30-day range, volume, peer comparisons, verified catalysts). Never remove numbers.
+2. LAYER 2 — EVIDENCE-BASED INTERPRETATION (CONDITIONAL): Interpret whether facts establish a pattern. Do NOT force a market regime label or section title. If evidence is inconclusive or range alone is thin, state facts cleanly and describe what cannot be established.
+3. LAYER 3 — WHY IT MATTERS (OPTIONAL): Explain market implication ONLY if Layer 2 produces a meaningful interpretation. Do NOT manufacture dramatic implications.
+4. NUMERICAL VERIFICATION: Double-check every comparative statement against actual numbers before outputting (NEVER say "outperformed both" if any peer has a higher return).
+5. CAUSALITY & NEWS: Silently ignore irrelevant retrieved news (e.g. general S&P news during a BNB query). Only link catalysts when evidence proves causation.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
