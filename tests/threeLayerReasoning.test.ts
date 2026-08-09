@@ -14,25 +14,34 @@ async function runThreeLayerReasoningTests() {
       'MARKET REGIME IS A CONCLUSION, NOT A MANDATORY TEMPLATE',
       'NUMERICAL VERIFICATION & CONSISTENCY CHECK (MANDATORY BEFORE WRITING)',
       'CAUSALITY & NEWS CALIBRATION',
-      'PROSE STRUCTURE (NO FORCED SECTION TITLES)',
+      'NEWS RELEVANCE GATE',
+      'BREVITY IS NON-NEGOTIABLE',
+      'SIGNED NUMBERS RULE',
     ];
 
     for (const tok of requiredTokens) {
       if (!sysPrompt.includes(tok)) {
-        console.error(`❌ FAIL: System prompt missing required 3-layer reasoning token: "${tok}"`);
+        console.error(`❌ FAIL: System prompt missing required token: "${tok}"`);
         process.exit(1);
       }
     }
-    console.log('✅ PASS: System prompt includes all 3-Layer Reasoning Hierarchy & Anti-Forced-Regime instructions');
+    console.log('✅ PASS: System prompt includes all 3-Layer Reasoning, News Gate, and Brevity instructions');
 
-    // Check that Solana inconclusive regime reference example is present in system prompt
-    if (!sysPrompt.includes('Solana is trading at $23.15, down 5.8% over the past 30 days')) {
-      console.error('❌ FAIL: System prompt missing Solana inconclusive regime reference example');
+    // Check that concise SOL reference example is present
+    if (!sysPrompt.includes('SOL is at **$23.15**')) {
+      console.error('❌ FAIL: System prompt missing concise SOL reference example');
       process.exit(1);
     }
-    console.log('✅ PASS: System prompt includes Solana inconclusive regime reference example');
+    console.log('✅ PASS: System prompt includes concise SOL reference example');
 
-    console.log('\n🎉 ALL 3-LAYER FINANCIAL REASONING TESTS PASSED SUCCESSFULLY!');
+    // Check that TOOL ERRORS ARE INVISIBLE rule is present
+    if (!sysPrompt.includes('TOOL ERRORS ARE INVISIBLE')) {
+      console.error('❌ FAIL: System prompt missing TOOL ERRORS ARE INVISIBLE rule');
+      process.exit(1);
+    }
+    console.log('✅ PASS: System prompt includes tool error suppression rule');
+
+    console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY!');
     process.exit(0);
   } catch (err) {
     console.error('❌ FAIL: Exception during system prompt verification:', err);

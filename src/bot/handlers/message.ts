@@ -464,13 +464,14 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into natural sell-side analyst prose using the 3-Layer Financial Reasoning Model (NO FORCED SECTION HEADERS):
-1. LAYER 1 — FACTUAL SNAPSHOT (MANDATORY): Always state all relevant retrieved numbers (Current price, 24h %, 30-day return, 30-day range, volume, peer comparisons, verified catalysts). Never remove numbers.
-2. LAYER 2 — EVIDENCE-BASED INTERPRETATION (CONDITIONAL): Interpret whether facts establish a pattern. Do NOT force a market regime label or section title. If evidence is inconclusive or range alone is thin, state facts cleanly and describe what cannot be established.
-3. LAYER 3 — WHY IT MATTERS (OPTIONAL): Explain market implication ONLY if Layer 2 produces a meaningful interpretation. Do NOT manufacture dramatic implications.
-4. NUMERICAL VERIFICATION — SIGNED NUMBERS: Verify every comparative statement against actual numbers WITH SIGNS before outputting. A positive return is ALWAYS greater than a negative return. NEVER say a positive-return asset "lags" a negative-return asset. Example: ETH +10.2% is ahead of SOL -5.8%, not behind it.
-5. CAUSALITY & NEWS: Silently ignore irrelevant retrieved news (e.g. general S&P news during a BNB query). Only link catalysts when evidence proves causation.
-6. TOOL ERRORS ARE INTERNAL: NEVER mention tool names, tool errors, or API failures in the response. If a data point is missing due to a tool error, simply omit it or say the data is unavailable — no technical explanation.`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into CONCISE sell-side analyst prose (3-Layer Model, NO section headers, BE BRIEF):
+1. FACTUAL SNAPSHOT: State key numbers (price, 24h %, 30-day return/range, volume, peer comparisons). Consolidate into flowing sentences — not a bullet list of every metric.
+2. INTERPRETATION (only if evidence supports it): State what the numbers establish. If inconclusive, say so briefly.
+3. WHY IT MATTERS (optional): One sentence max, only if Layer 2 is meaningful.
+BREVITY: 3–6 lines for simple queries. Lead with the strongest signal. Cut anything that doesn't change understanding.
+NEWS GATE: Include retrieved news ONLY if it is directly about the asset AND explains the move or is a material development. Omit loosely related headlines silently.
+SIGNED NUMBERS: +10.2% > +3.1% > -5.8%. NEVER say a positive-return asset "lags" a negative-return asset.
+TOOL ERRORS: NEVER mention tool names or API failures. Omit missing data silently or say "unavailable".`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
