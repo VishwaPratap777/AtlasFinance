@@ -401,17 +401,8 @@ export async function processMessage(
         }
 
         if (!response.toolCalls || response.toolCalls.length === 0) {
-          // No tool calls — this is the answer.
+          // No tool calls — this is the final answer.
           finalResponse = response.content;
-
-          // Deep-research query the fast model answered directly: upgrade with one
-          // streamed pass on the routed 70B model so quality isn't lost to the router.
-          if (isDecisionRound && routedModel !== DECISION_MODEL) {
-            const tUpgrade = Date.now();
-            const upgraded = await chatStream(messages, undefined, streamChunk, routedModel).catch(() => null);
-            console.log(`[MessageHandler/timing] upgrade model=${routedModel} ${Date.now() - tUpgrade}ms`);
-            if (upgraded && upgraded.content) finalResponse = upgraded.content;
-          }
           break;
         }
 

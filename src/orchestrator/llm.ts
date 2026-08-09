@@ -37,9 +37,9 @@ export interface LLMResponse {
 // ─── Model Cooldown / Circuit Breaker ──────────────────────────────────────────
 const modelCooldowns: Record<string, number> = {};
 
-// How long to skip a model after a rate-limit (429). Kept short so a single 429 on
+// How long to skip a model after a rate-limit (429). Kept short (15s) so a single 429 on
 // Groq's free tier doesn't route every message to slower fallbacks for minutes.
-const RATE_LIMIT_COOLDOWN_MS = 60000;
+const RATE_LIMIT_COOLDOWN_MS = 15000;
 
 function isModelCoolingDown(modelName: string): boolean {
   const until = modelCooldowns[modelName];
