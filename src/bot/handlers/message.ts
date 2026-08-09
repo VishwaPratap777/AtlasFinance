@@ -430,7 +430,9 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize these results into a concise, insightful response. Look across ALL the evidence — price data, news, historical context, broader market signals — and surface what is genuinely useful. If the price move is small, check whether the news or other data reveals something worth noting. Do not echo [context:] metadata lines. Explain why it matters, do not just restate the data.`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize these results for the user:
+- If RICH verified news/catalysts exist (e.g. BTC): deliver full analytical depth — stat card, verified news bullets, "Why it matters" synthesis, and actionable next steps.
+- If NO verified news/catalysts exist (e.g. LTC): present the stat card, report available price/range data, state plainly that no verified news/catalyst was identified in the feed, and stop naturally. NEVER speculate on why news is absent, infer market sentiment or positioning from zero news, or give investment advice.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
