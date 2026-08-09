@@ -469,8 +469,8 @@ DATA INTEGRITY RULES:
       const formatted = formatForTelegram(finalResponse);
 
       // Delete temporary typing placeholder message when final output is ready
-      if (typingPlaceholder && typingPlaceholder.message_id) {
-        await ctx.telegram.deleteMessage(ctx.chat?.id, typingPlaceholder.message_id).catch(() => { });
+      if (ctx.chat?.id && typingPlaceholder?.message_id) {
+        await ctx.telegram.deleteMessage(ctx.chat.id, typingPlaceholder.message_id).catch(() => { });
       }
 
       // Send the clean, complete final output message
