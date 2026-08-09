@@ -464,14 +464,22 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into CONCISE analyst prose (3–6 sentences, NO section headers, NO filler):
-FIND THE STRONGEST SIGNAL: A flat 24h move does NOT make everything uninterpretable. If 30d trend is strong, lead with it. If peer comparison shows divergence, state it. Always find the most informative timeframe.
-NUMBERS: State key numbers (price, 24h %, 30d return, volume, peer comparisons) consolidated into flowing sentences.
-INTERPRETATION: State what the numbers establish. Do NOT say "difficult to interpret" or "challenging to establish" when useful data exists.
-NEWS: Include ONLY if directly about the asset AND explains the move or is material. Omit loosely related headlines silently.
-SIGNED NUMBERS: +10.2% > +3.1% > -5.8%. NEVER say a positive-return asset "lags" a negative-return asset.
-BANNED: "Monitor closely", "may be a precursor", "worth keeping an eye on", "investors may want to consider", "raises eyebrows". End after useful analysis.
-TOOL ERRORS: NEVER mention tool names or API failures.`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into a clean Telegram-friendly briefing (Bold Takeaway -> 2-4 Bullets -> Single Concluding Sentence):
+FORMAT:
+**Short bold opening takeaway sentence**
+
+• Current: Price & 24h %
+• 30-day: Return & peer comparisons
+• Volume: 24h volume (if available)
+• Catalysts: Verified asset-specific news status (only if relevant)
+
+One short concluding sentence stating the strongest supported interpretation (STOP THERE, NO forced headers, NO walls of text).
+
+RULES:
+- FIND STRONGEST SIGNAL: A flat 24h move does NOT make data uninterpretable. Emphasize 30d trend or relative strength.
+- SIGNED NUMBERS: +10.2% > +3.1% > -5.8%. Verify ordering (+10.2% outpaces +3.1% and -5.8%).
+- BANNED FILLER: Never say "Monitor closely", "may be a precursor to fluctuations", "difficult to interpret".
+- TOOL ERRORS: NEVER mention tool names or API errors. Omit missing data silently.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
