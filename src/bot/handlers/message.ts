@@ -218,9 +218,6 @@ export async function processMessage(
       let finalResponse = '';
       const allToolCalls: { name: string; args: Record<string, unknown>; result?: string }[] = [];
       let round = 0;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let streamMessage: any = null;
-      let lastEditTime = 0;
 
       // Route once per message: simple queries → fast 8B, deep-research → 70B.
       const routedModel = selectOptimalModel(userText);
@@ -259,38 +256,8 @@ export async function processMessage(
         }
       }
 
-      // Progressive Telegram streaming callback (used only for synthesis/answer rounds).
-      let isEditing = false;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let streamMessagePromise: Promise<any> | null = null;
-
-      const streamChunk = (chunkText: string) => {
-        const now = Date.now();
-        if (!isEditing && now - lastEditTime > 1500 && chunkText.trim().length > 80) {
-          lastEditTime = now;
-          isEditing = true;
-          const formattedChunk = formatForTelegram(chunkText);
-          streamMessagePromise = (async () => {
-            try {
-              if (!streamMessage) {
-                streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(async () => {
-                  return await ctx.reply(formattedChunk.replace(/[*_`]/g, '')).catch(() => null);
-                });
-              } else if (streamMessage?.message_id) {
-                await ctx.telegram
-                  .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk, { parse_mode: 'Markdown' })
-                  .catch(async () => {
-                    await ctx.telegram
-                      .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk.replace(/[*_`]/g, ''))
-                      .catch(() => { });
-                  });
-              }
-            } finally {
-              isEditing = false;
-            }
-          })();
-        }
-      };
+      // Temporary typing response message (deleted when final output is ready)
+      const typingPlaceholder = await ctx.reply('⚡ *Analyzing market data...*', { parse_mode: 'Markdown' }).catch(() => null);
 
       // Extract context focus tickers for follow-ups (e.g. "what about volume?", "compare it to Tesla?")
       let resolvedTickers = [...quoteTickers];
@@ -313,9 +280,7 @@ export async function processMessage(
         const activeTools = isDecisionRound ? TOOL_DEFINITIONS : undefined;
         const modelForRound = isDecisionRound ? DECISION_MODEL : routedModel;
 
-        // Stream only synthesis rounds — a decision round's partial text is discarded the
-        // instant a tool call is chosen, so streaming it just burns Telegram edit calls.
-        const onChunk = isDecisionRound ? undefined : streamChunk;
+        const onChunk = undefined;
 
         const roundMaxTokens = undefined;
 
@@ -503,48 +468,16 @@ DATA INTEGRITY RULES:
 
       const formatted = formatForTelegram(finalResponse);
 
-      // Ensure any in-flight streaming message creation promise resolves before finalizing
-      if (streamMessagePromise) {
-        await (streamMessagePromise as Promise<unknown>).catch(() => { });
+      // Delete temporary typing placeholder message when final output is ready
+      if (typingPlaceholder && typingPlaceholder.message_id) {
+        await ctx.telegram.deleteMessage(ctx.chat?.id, typingPlaceholder.message_id).catch(() => { });
       }
 
-      // Send or finalize Telegram message — ALWAYS overwrite streamMessage in-place if it exists
-      if (streamMessage && streamMessage.message_id) {
-        let editedSuccess = false;
-        try {
-          await ctx.telegram.editMessageText(
-            ctx.chat?.id,
-            streamMessage.message_id,
-            undefined,
-            formatted,
-            { parse_mode: 'Markdown' }
-          );
-          editedSuccess = true;
-        } catch {
-          try {
-            await ctx.telegram.editMessageText(
-              ctx.chat?.id,
-              streamMessage.message_id,
-              undefined,
-              formatted.replace(/[*_`]/g, '')
-            );
-            editedSuccess = true;
-          } catch {
-            editedSuccess = false;
-          }
-        }
-        if (!editedSuccess) {
-          // Fallback: If editing streamMessage failed, send full reply so user NEVER gets cut-off text!
-          await ctx.reply(formatted, { parse_mode: 'Markdown' }).catch(() => {
-            return ctx.reply(formatted.replace(/[*_`]/g, ''));
-          });
-        }
-      } else {
-        try {
-          await ctx.reply(formatted, { parse_mode: 'Markdown' });
-        } catch {
-          await ctx.reply(formatted.replace(/[*_`]/g, ''));
-        }
+      // Send the clean, complete final output message
+      try {
+        await ctx.reply(formatted, { parse_mode: 'Markdown' });
+      } catch {
+        await ctx.reply(formatted.replace(/[*_`]/g, ''));
       }
 
       console.log(
