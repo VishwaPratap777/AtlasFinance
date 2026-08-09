@@ -1,5 +1,5 @@
 import { ToolDefinition } from './llm';
-import { getQuote, formatQuote } from '../tools/stockQuote';
+import { getQuote, formatQuote, KNOWN_CRYPTO } from '../tools/stockQuote';
 import { getCompanyProfile, getBasicFinancials, getInsiderTransactions } from '../tools/companyProfile';
 import { getEarningsCalendar, getSurprises, formatEarningsEvent } from '../tools/earnings';
 import { getCompanyNews, getMarketNews, getAnalystRatings, getPriceTarget, formatNewsItems } from '../tools/news';
@@ -198,7 +198,18 @@ export async function executeTool(
       }
 
       case 'get_company_profile': {
-        const ticker = args.ticker as string;
+        const ticker = (args.ticker as string || '').toUpperCase().trim();
+        const baseTicker = ticker.replace('-USD', '');
+        
+        // Entity Disambiguation: Prevent matching crypto assets to corporate stock profiles (e.g. LTC / Litecoin vs LTC Properties, Inc.)
+        const isCrypto = KNOWN_CRYPTO.has(baseTicker) || KNOWN_CRYPTO.has(`${baseTicker}-USD`);
+        if (isCrypto) {
+          const nameMap: Record<string, string> = { LTC: 'Litecoin', BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana', DOGE: 'Dogecoin' };
+          const cryptoName = nameMap[baseTicker] || baseTicker;
+          return `[Asset Note]: ${baseTicker} (${cryptoName}) is a decentralized cryptocurrency asset, not a corporate equity.\n` +
+                 `(Note: If you intended to query the US REIT stock LTC Properties, Inc., specify equity symbol LTC Properties).`;
+        }
+
         const [profile, fin, insider] = await Promise.all([
           getCompanyProfile(ticker),
           args.include_financials === 'true' ? getBasicFinancials(ticker).catch(() => null) : Promise.resolve(null),
@@ -224,22 +235,51 @@ export async function executeTool(
       }
 
       case 'get_earnings_calendar': {
-        const tickers = args.tickers
-          ? (args.tickers as string).split(',').map((t) => t.trim()).filter(Boolean)
+        const rawTickers = args.tickers
+          ? (args.tickers as string).split(',').map((t) => t.trim().toUpperCase()).filter(Boolean)
           : profile?.watchlist?.map((w) => w.ticker) || [];
+        // Filter out crypto assets (cryptocurrencies do not report quarterly earnings)
+        const equityTickers = rawTickers.filter((t) => !KNOWN_CRYPTO.has(t.replace('-USD', '')));
+        if (equityTickers.length === 0) {
+          return 'No corporate earnings calendar applies to cryptocurrency assets.';
+        }
         const daysAhead = parseInt((args.days_ahead as string) || '30');
-        const events = await getEarningsCalendar(tickers, daysAhead);
-        if (events.length === 0) return 'No upcoming earnings in the next ' + daysAhead + ' days for the tracked tickers.';
+        const events = await getEarningsCalendar(equityTickers, daysAhead);
+        if (events.length === 0) return 'No upcoming earnings in the next ' + daysAhead + ' days for the tracked equity tickers.';
         return 'Upcoming earnings:\n' + events.map(formatEarningsEvent).join('\n');
       }
 
       case 'get_earnings_history': {
+        const ticker = (args.ticker as string || '').toUpperCase().trim().replace('-USD', '');
+        if (KNOWN_CRYPTO.has(ticker)) {
+          return `[Asset Note]: ${ticker} is a cryptocurrency asset and does not report corporate EPS earnings history.`;
+        }
         return await getSurprises(args.ticker as string);
       }
 
       case 'get_company_news': {
+        const ticker = (args.ticker as string || '').toUpperCase().trim();
+        const baseTicker = ticker.replace('-USD', '');
+        const isCrypto = KNOWN_CRYPTO.has(baseTicker) || KNOWN_CRYPTO.has(`${baseTicker}-USD`);
+
+        if (isCrypto) {
+          const cryptoNews = await getMarketNews('crypto');
+          const nameMap: Record<string, string> = { LTC: 'LITECOIN', BTC: 'BITCOIN', ETH: 'ETHEREUM', SOL: 'SOLANA', DOGE: 'DOGECOIN' };
+          const fullName = nameMap[baseTicker] || baseTicker;
+          
+          const filtered = cryptoNews.filter((item) => {
+            const text = `${item.headline} ${item.summary}`.toUpperCase();
+            return text.includes(baseTicker) || text.includes(fullName);
+          });
+
+          if (filtered.length === 0) {
+            return `No clear catalyst or verified news was identified for ${baseTicker} from the available data feeds.`;
+          }
+          return formatNewsItems(filtered, 5);
+        }
+
         const days = parseInt((args.days as string) || '3');
-        const news = await getCompanyNews(args.ticker as string, days);
+        const news = await getCompanyNews(ticker, days);
         return formatNewsItems(news, 5);
       }
 
@@ -249,18 +289,26 @@ export async function executeTool(
       }
 
       case 'get_analyst_ratings': {
-        const ratings = await getAnalystRatings(args.ticker as string);
+        const ticker = (args.ticker as string || '').toUpperCase().trim().replace('-USD', '');
+        if (KNOWN_CRYPTO.has(ticker)) {
+          return `[Asset Note]: ${ticker} is a cryptocurrency asset and does not have traditional equity sell-side price target ratings.`;
+        }
+        const ratings = await getAnalystRatings(ticker);
         if (args.include_price_target === 'true') {
-          const target = await getPriceTarget(args.ticker as string);
+          const target = await getPriceTarget(ticker);
           return ratings + '\n\n' + target;
         }
         return ratings;
       }
 
       case 'get_sec_filings': {
+        const ticker = (args.ticker as string || '').toUpperCase().trim().replace('-USD', '');
+        if (KNOWN_CRYPTO.has(ticker)) {
+          return `[Asset Note]: ${ticker} is a decentralized cryptocurrency asset and does not file corporate SEC EDGAR reports (10-K/10-Q).`;
+        }
         const formTypes = (args.form_types as string)?.split(',').map((t) => t.trim()) || ['10-K', '10-Q', '8-K'];
-        const filings = await getRecentFilings(args.ticker as string, formTypes);
-        return formatFilings(filings, args.ticker as string);
+        const filings = await getRecentFilings(ticker, formTypes);
+        return formatFilings(filings, ticker);
       }
 
       case 'search_sec_filings': {

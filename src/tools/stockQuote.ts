@@ -20,14 +20,14 @@ export interface QuoteResult {
   timestamp: string;
 }
 
-const KNOWN_CRYPTO = new Set([
+export const KNOWN_CRYPTO = new Set([
   'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK',
   'SHIB', 'MATIC', 'PEPE', 'UNI', 'LTC', 'BCH', 'NEAR', 'APT', 'SUI',
   'BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD', 'XRP-USD', 'ADA-USD',
   'BTCUSD', 'ETHUSD', 'SOLUSD', 'DOGEUSD', 'XRPUSD', 'ADAUSD'
 ]);
 
-const CRYPTO_NAME_MAP: Record<string, string> = {
+export const CRYPTO_NAME_MAP: Record<string, string> = {
   BITCOIN: 'BTC',
   ETHEREUM: 'ETH',
   SOLANA: 'SOL',
