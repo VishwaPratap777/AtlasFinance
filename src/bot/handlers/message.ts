@@ -321,6 +321,14 @@ export async function processMessage(
         if (isDecisionRound && resolvedTickers.length > 0) {
           const isCompareAsk = /\b(compare|versus|vs|difference|or)\b/i.test(userText);
           const isEarningsAsk = /\b(earnings|quarterly|eps|revenue|guidance|report|results|surprise|calendar)\b/i.test(userText);
+          const isMoveAsk = /\b(why|cause|reason|dump\w*|pump\w*|fall\w*|ris\w*|crash\w*|spik\w*|mov\w*|drop\w*|gain\w*)\b/i.test(userText);
+          const isPatternAsk = /\b(pattern\w*|trend\w*|technical|support|resistance|breakout\w*|consolidat\w*|momentum|30-?day|monthly|chart)\b/i.test(userText);
+
+          // Simple price / snapshot query: short ask (<=4 words) or explicit price keywords without why/pattern/compare/news
+          const wordCount = userText.trim().split(/\s+/).length;
+          const isSimplePrice = !isCompareAsk && !isEarningsAsk && !isMoveAsk && !isPatternAsk &&
+            (wordCount <= 4 || /\b(price|quote|worth|cost|value|level|\$[A-Z]+)\b/i.test(userText)) &&
+            !/\b(how('s|\s+is)|what('s|\s+is)|news|update|why)\b/i.test(userText);
 
           const toolCalls: { name: string; args: Record<string, unknown> }[] = [];
 
@@ -329,25 +337,33 @@ export async function processMessage(
             const baseCrypto = clean.replace('-USD', '').replace(/USD$/, '');
             const isCrypto = KNOWN_CRYPTO.has(clean) || KNOWN_CRYPTO.has(baseCrypto);
 
-            // 1. Primary quote & news
+            // 1. Primary quote is always needed for real-time market data
             toolCalls.push({ name: 'get_stock_quote', args: { ticker: clean } });
+
+            // 2. Simple price query needs ONLY get_stock_quote (ultra-fast ~300ms response)
+            if (isSimplePrice) {
+              continue;
+            }
+
+            // 3. News context for move explanation, general updates ("how's BTC?"), news asks, or pattern queries
             toolCalls.push({ name: 'get_company_news', args: { ticker: clean, days: '3' } });
 
-            // 2. Always fetch 30-day price history for primary asset to get 30-day trend & low/high levels
-            toolCalls.push({ name: 'get_price_history', args: { ticker: clean, period: '1mo' } });
+            // 4. Historical price data: fetch ONLY when pattern/trend/comparison explicitly requests historical context
+            if (isPatternAsk || isCompareAsk) {
+              toolCalls.push({ name: 'get_price_history', args: { ticker: clean, period: '1mo' } });
 
-            // 3. Always fetch 2-3 benchmark peers over the exact same 30-day window
-            const peers = isCrypto
-              ? baseCrypto === 'BTC' ? ['ETH-USD', 'SOL-USD'] : baseCrypto === 'ETH' ? ['BTC-USD', 'SOL-USD'] : ['BTC-USD', 'ETH-USD']
-              : ['SPY', 'QQQ'];
+              if (isCompareAsk) {
+                const peers = isCrypto
+                  ? baseCrypto === 'BTC' ? ['ETH-USD'] : baseCrypto === 'ETH' ? ['BTC-USD'] : ['BTC-USD']
+                  : ['SPY'];
 
-            for (const peer of peers) {
-              toolCalls.push({ name: 'get_price_history', args: { ticker: peer, period: '1mo' } });
+                for (const peer of peers) {
+                  toolCalls.push({ name: 'get_price_history', args: { ticker: peer, period: '1mo' } });
+                }
+                toolCalls.push({ name: 'get_company_profile', args: { ticker: clean, include_financials: 'true' } });
+              }
             }
 
-            if (isCompareAsk) {
-              toolCalls.push({ name: 'get_company_profile', args: { ticker: clean, include_financials: 'true' } });
-            }
             if (isEarningsAsk) {
               toolCalls.push({ name: 'get_earnings_history', args: { ticker: clean } });
             }
