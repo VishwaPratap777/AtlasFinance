@@ -448,12 +448,12 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into 3–4 short paragraphs of concise analyst prose (no headers, no labeled sections, no bullet-point stat cards):
-- Open with current price + today's move, then immediately state the 30-day trend conclusion and peer comparison in natural sentences.
-- Draw a conclusion from the data — state who is outperforming/underperforming and what it implies. Never list numbers without interpreting them.
-- If no verified catalyst exists, say so plainly and redirect to the 30-day relative trend as the meaningful signal.
-- Close with one "→" next-step line.
-- Keep it tight and conversational. Never use labeled sections like "Stat Card:", "30-Day Trend:", "Relative Context:", "Why It Matters:".`,
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into 2–3 short, packed paragraphs of concise analyst prose (no headers, no labeled sections, no bullet stat cards):
+1. NUMERICAL VERIFICATION: Verify every comparative claim against the exact numbers retrieved before outputting. NEVER say "outperformed both" if any comparator has a higher return.
+2. STRICT GROUNDING: Every conclusion must be directly traceable to the retrieved data. NEVER infer investor optimism from price rises, market waiting from zero catalysts, or lost momentum from dips unless explicit evidence proves it.
+3. CONCISE & NUMBER-PACKED: Weave exact numbers tightly into the conclusion sentences (e.g. "LTC is at $46.32 (+1.51% today), with a 30-day gain of 5.8% outpacing BTC (+3.1%) but trailing ETH (+10.2%).").
+4. If no verified catalyst exists, say so plainly and focus on the 30-day relative return as the primary data signal.
+5. Close with one "→" next-step line.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];
