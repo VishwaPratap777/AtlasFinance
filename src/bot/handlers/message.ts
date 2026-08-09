@@ -465,15 +465,16 @@ export async function processMessage(
         const toolResultMessage: ChatMessage = {
           role: 'user',
           content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into a clean Telegram-friendly briefing (Bold Takeaway -> 2-4 Bullets -> Single Concluding Sentence):
-FORMAT:
+MANDATORY LAYOUT (ALWAYS INCLUDE BULLETS & NUMBERS):
 **Short bold opening takeaway sentence**
 
-• Current: Price & 24h %
-• 30-day: Return & peer comparisons
+• Current: Price & 24h % move
+• 30-day: Return & peer comparisons (if historical data present)
 • Volume: 24h volume (if available)
 • Catalysts: Verified asset-specific news status (only if relevant)
 
 One short concluding sentence stating the strongest supported interpretation (STOP THERE, NO forced headers, NO walls of text).
+NEVER emit a bare 1-sentence response without bullets or numbers!
 
 DATA INTEGRITY RULES:
 - ZERO METRIC LEAKAGE: Bind every metric strictly to its exact target ticker. BTC volume must NEVER appear under SOL or ETH!

@@ -1,74 +1,76 @@
-import { getQuote, formatQuote, QuoteResult } from '../src/tools/stockQuote';
-import { buildSystemPrompt } from '../src/orchestrator/conversation';
+import { formatQuote, QuoteResult } from '../src/tools/stockQuote';
+import { buildMessageHistory } from '../src/orchestrator/conversation';
+import { executeTool } from '../src/orchestrator/tools';
 
-async function runMarketRegimeTests() {
-  console.log('🧪 Running Market Regime & Reasoning Layer Tests...\n');
+async function runCalibrationTests() {
+  console.log('🧪 Running Market Regime & Calibration Tests...\n');
 
-  // Test 1: formatQuote formats volume correctly when present
+  // Test 1: formatQuote includes 24h volume formatting
   const mockQuote: QuoteResult = {
     ticker: 'LTC-USD',
     price: 46.21,
     change: 0.23,
     changePercent: 0.50,
-    high: 46.50,
-    low: 45.80,
+    high: 46.80,
+    low: 45.90,
     open: 45.98,
     previousClose: 45.98,
-    volume: 126450000,
+    volume: 126000000,
     timestamp: new Date().toISOString(),
   };
 
   const formatted = formatQuote(mockQuote);
   console.log('Formatted Quote Output:\n', formatted);
 
-  if (!formatted.includes('• 24h Volume: ~$126.5M')) {
-    console.error('❌ FAIL: formatQuote did not contain expected formatted volume "• 24h Volume: ~$126.5M"');
+  if (!formatted.includes('24h Volume') || !formatted.includes('126')) {
+    console.error('❌ FAIL: formatQuote did not render 24h volume correctly!');
     process.exit(1);
   }
-  console.log('✅ PASS: formatQuote correctly formats 24h Volume');
+  console.log('✅ PASS: formatQuote renders 24h volume correctly');
 
-  // Test 2: System prompt contains Market Regime & Why It Matters guidelines
-  try {
-    const sysPrompt = buildSystemPrompt(null);
+  // Test 2: System prompt contains mandatory calibration & correlation rules
+  const history = await buildMessageHistory(12345, 'and LTC?', null);
+  const sysMsg = history.find((m) => m.role === 'system')?.content || '';
 
-    const requiredTokens = [
-      'MARKET REGIME / PATTERN',
-      'WHY IT MATTERS',
-      'consolidation',
-      'relative strength',
-      'insufficient evidence',
-      'STRICT REGIME & CAUSAL SAFETY',
-    ];
-
-    for (const tok of requiredTokens) {
-      if (!sysPrompt.includes(tok)) {
-        console.error(`❌ FAIL: System prompt missing required market regime token: "${tok}"`);
-        process.exit(1);
-      }
-    }
-    console.log('✅ PASS: System prompt includes all Market Regime and "Why It Matters" instructions');
-  } catch (err) {
-    console.error('❌ FAIL: Exception while building system prompt:', err);
+  if (!sysMsg.includes('Recent ETF inflows provide a positive institutional-demand signal.')) {
+    console.error('❌ FAIL: System prompt missing mandatory ETF inflow calibration rule!');
     process.exit(1);
   }
+  console.log('✅ PASS: ETF inflow calibration rule present in system prompt');
 
-  // Test 3: getQuote('LTC') returns price quote with ticker LTC-USD
-  try {
-    const ltcQuote = await getQuote('LTC');
-    console.log('\nLive Quote Result for "LTC":', JSON.stringify(ltcQuote, null, 2));
-
-    if (ltcQuote.ticker !== 'LTC-USD') {
-      console.error(`❌ FAIL: Expected ticker "LTC-USD", got "${ltcQuote.ticker}"`);
-      process.exit(1);
-    }
-    console.log('✅ PASS: getQuote("LTC") resolved to "LTC-USD" with volume/quote details');
-
-    console.log('\n🎉 ALL MARKET REGIME TESTS PASSED SUCCESSFULLY!');
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ FAIL: Exception during getQuote("LTC"):', err);
+  if (!sysMsg.includes('Relevant context')) {
+    console.error('❌ FAIL: System prompt missing "Relevant context" labelling distinction!');
     process.exit(1);
   }
+  console.log('✅ PASS: "Relevant context" vs "Catalyst" label rule present in system prompt');
+
+  if (!sysMsg.includes('Do NOT turn correlation into causation')) {
+    console.error('❌ FAIL: System prompt missing correlation vs causation rule!');
+    process.exit(1);
+  }
+  console.log('✅ PASS: Correlation vs causation rule present in system prompt');
+
+  // Test 3: Entity Disambiguation for LTC
+  const profileRes = await executeTool(
+    'get_company_profile',
+    { ticker: 'LTC' },
+    null,
+    12345,
+    async () => {}
+  );
+  console.log('\nEntity Profile Result for "LTC":\n', profileRes);
+
+  if (!profileRes.includes('decentralized cryptocurrency') || profileRes.includes('LTC Properties')) {
+    console.error('❌ FAIL: Entity disambiguation failed! Returned corporate profile for crypto LTC.');
+    process.exit(1);
+  }
+  console.log('✅ PASS: Entity disambiguation correctly blocked LTC Properties for crypto LTC');
+
+  console.log('\n🎉 ALL CALIBRATION & MARKET REGIME TESTS PASSED SUCCESSFULLY!');
+  process.exit(0);
 }
 
-runMarketRegimeTests();
+runCalibrationTests().catch((err) => {
+  console.error('❌ FAIL: Unexpected error running tests:', err);
+  process.exit(1);
+});

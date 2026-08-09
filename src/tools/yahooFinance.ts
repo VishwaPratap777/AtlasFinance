@@ -80,7 +80,7 @@ export async function quickLookup(ticker: string): Promise<QuickSummary> {
 
   // Single fast query for price and core key metrics
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const q: any = await withTimeout(yahooFinance.quote(symbol), 5000, 'Yahoo quote').catch(() => null);
+  const q: any = await withTimeout(yahooFinance.quote(symbol), 2500, 'Yahoo quote').catch(() => null);
   if (q && q.regularMarketPrice) {
     return {
       ticker: symbol,

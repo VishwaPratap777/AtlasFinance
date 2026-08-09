@@ -164,7 +164,7 @@ async function callGroq(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   model = 'llama-3.3-70b-versatile',
-  maxTokens = 450,
+  maxTokens = 1000,
   forceTool = false
 ): Promise<LLMResponse> {
   if (isModelCoolingDown(model)) {
@@ -236,7 +236,7 @@ async function callGemini(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   modelName = 'gemini-2.5-flash',
-  maxTokens = 450
+  maxTokens = 1000
 ): Promise<LLMResponse> {
   if (!gemini) throw new Error('Gemini API key not configured');
   if (isModelCoolingDown(modelName)) {
@@ -317,7 +317,7 @@ async function callAgentRouter(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   modelName = 'anthropic/claude-3.5-sonnet',
-  maxTokens = 450,
+  maxTokens = 1000,
   forceTool = false
 ): Promise<LLMResponse> {
   if (!env.AGENT_ROUTER_API_KEY) throw new Error('Agent Router API key not configured');
@@ -408,7 +408,7 @@ async function callGroqStream(
   tools?: ToolDefinition[],
   onChunk?: (text: string) => void | Promise<void>,
   model = 'llama-3.3-70b-versatile',
-  maxTokens = 450,
+  maxTokens = 1000,
   forceTool = false
 ): Promise<LLMResponse> {
   if (isModelCoolingDown(model)) {
@@ -531,7 +531,7 @@ export async function chat(
   messages: ChatMessage[],
   tools?: ToolDefinition[],
   preferredModel?: string,
-  maxTokens = 450,
+  maxTokens = 1000,
   forceTool = false
 ): Promise<LLMResponse> {
   const targetModel = preferredModel || 'llama-3.1-8b-instant';
@@ -578,7 +578,7 @@ export async function chatStream(
   tools?: ToolDefinition[],
   onChunk?: (text: string) => void | Promise<void>,
   preferredModel?: string,
-  maxTokens = 450,
+  maxTokens = 1000,
   forceTool = false
 ): Promise<LLMResponse> {
   const started = Date.now();
