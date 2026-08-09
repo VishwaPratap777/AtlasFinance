@@ -261,21 +261,20 @@ export async function processMessage(
 
       // Progressive Telegram streaming callback (used only for synthesis/answer rounds).
       let isEditing = false;
-      let isCreatingStreamMessage = false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let streamMessagePromise: Promise<any> | null = null;
 
       const streamChunk = (chunkText: string) => {
         const now = Date.now();
-        if (!isEditing && !isCreatingStreamMessage && now - lastEditTime > 1200 && chunkText.trim().length > 80) {
+        if (!isEditing && now - lastEditTime > 1200 && chunkText.trim().length > 80) {
           lastEditTime = now;
           isEditing = true;
           const formattedChunk = formatForTelegram(chunkText);
-          (async () => {
+          streamMessagePromise = (async () => {
             try {
               if (!streamMessage) {
-                isCreatingStreamMessage = true;
                 streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(() => null);
-                isCreatingStreamMessage = false;
-              } else {
+              } else if (streamMessage?.message_id) {
                 await ctx.telegram
                   .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk, { parse_mode: 'Markdown' })
                   .catch(() => { });
@@ -458,8 +457,13 @@ export async function processMessage(
 
       const formatted = formatForTelegram(finalResponse);
 
+      // Ensure any in-flight streaming message creation promise resolves before finalizing
+      if (streamMessagePromise) {
+        await streamMessagePromise.catch(() => { });
+      }
+
       // Send or finalize Telegram message — ALWAYS overwrite streamMessage in-place if it exists
-      if (streamMessage) {
+      if (streamMessage && streamMessage.message_id) {
         try {
           await ctx.telegram.editMessageText(
             ctx.chat?.id,
