@@ -153,7 +153,17 @@ function isIndianSymbol(symbol: string): boolean {
 const TICKER_STOPWORDS = new Set([
   'THE', 'AND', 'FOR', 'ARE', 'USD', 'USA', 'CEO', 'CFO', 'ETF', 'IPO', 'GDP',
   'API', 'FAQ', 'NEWS', 'WHAT', 'WHEN', 'WHY', 'HOW', 'WHO', 'BUY', 'SELL',
-  'HOLD', 'YES', 'NO', 'OK', 'PE', 'EPS', 'YTD', 'ATH', 'RSI', 'AI', 'OK',
+  'HOLD', 'YES', 'NO', 'OK', 'PE', 'EPS', 'YTD', 'ATH', 'RSI', 'AI',
+  'HEY', 'HET', 'HI', 'HELLO', 'SUP', 'YO', 'PLS', 'PLEASE', 'THANKS', 'THANK',
+  'OKAY', 'INFO', 'ABOUT', 'TELL', 'KNOW', 'WANT', 'SEE', 'LOOK', 'JUST', 'WITH',
+  'LIKE', 'WELL', 'DOING', 'WHATS', 'HOWS', 'CAN', 'COULD', 'WOULD', 'SHOULD',
+  'IS', 'WAS', 'WERE', 'BE', 'BEEN', 'BEING', 'HAVE', 'HAS', 'HAD', 'DO', 'DOES',
+  'DID', 'DONE', 'GET', 'GOT', 'GIVE', 'GIVES', 'TAKE', 'TAKES', 'MAKE', 'MAKES',
+  'LET', 'LETS', 'MUCH', 'MANY', 'MORE', 'MOST', 'SOME', 'ANY', 'ALL', 'BOTH',
+  'EACH', 'EVERY', 'OTHER', 'ANOTHER', 'SUCH', 'OWN', 'SAME', 'SO', 'THAN', 'TOO',
+  'VERY', 'NOW', 'TODAY', 'THIS', 'THAT', 'THESE', 'THOSE', 'IT', 'ITS', 'THEY',
+  'THEIR', 'THEM', 'WE', 'OUR', 'US', 'YOU', 'YOUR', 'HE', 'HIM', 'HIS', 'SHE',
+  'HER', 'I', 'ME', 'MY', 'MINE', 'GOOD', 'GREAT', 'BEST', 'BAD', 'WORST',
 ]);
 
 // Words that signal the user wants a live number/market read.

@@ -448,11 +448,11 @@ export async function processMessage(
 
         const toolResultMessage: ChatMessage = {
           role: 'user',
-          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into 2–3 short, packed paragraphs of concise analyst prose (no headers, no labeled sections, no bullet stat cards):
-1. NUMERICAL VERIFICATION: Verify every comparative claim against the exact numbers retrieved before outputting. NEVER say "outperformed both" if any comparator has a higher return.
-2. STRICT GROUNDING: Every conclusion must be directly traceable to the retrieved data. NEVER infer investor optimism from price rises, market waiting from zero catalysts, or lost momentum from dips unless explicit evidence proves it.
-3. CONCISE & NUMBER-PACKED: Weave exact numbers tightly into the conclusion sentences (e.g. "LTC is at $46.32 (+1.51% today), with a 30-day gain of 5.8% outpacing BTC (+3.1%) but trailing ETH (+10.2%).").
-4. If no verified catalyst exists, say so plainly and focus on the 30-day relative return as the primary data signal.
+          content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize into concise analyst research (identifying the MARKET REGIME, supporting metrics, and WHY IT MATTERS):
+1. MARKET REGIME: Open with the evidence-backed Market Regime (e.g. consolidation, trend, recovery, relative strength) when data supports it.
+2. NUMERICAL VERIFICATION: Verify every comparative claim against the exact numbers retrieved before outputting. NEVER say "outperformed both" if any comparator has a higher return.
+3. STRICT GROUNDING: Every conclusion must be directly traceable to retrieved data. NEVER infer investor optimism from price rises or lost momentum from dips without explicit evidence. Ignore tool errors for non-existent/typo tickers and focus cleanly on valid retrieved asset data.
+4. WHY IT MATTERS: Conclude with 1 concise sentence explaining the structural market significance.
 5. Close with one "→" next-step line.`,
         };
 
