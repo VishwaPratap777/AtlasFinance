@@ -321,16 +321,19 @@ export async function processMessage(
         if (isDecisionRound && resolvedTickers.length > 0) {
           const isNewsAsk = /\b(news|on with|up with|happening|update|developments?)\b/i.test(userText);
           const isCompareAsk = /\b(compare|versus|vs|difference|or)\b/i.test(userText);
+          const isPatternAsk = /\b(pattern|patterns|trend|trends|consolidation|range|technical|technicals|structure|momentum|breakout|support|resistance)\b/i.test(userText);
 
           const toolCalls = resolvedTickers.flatMap((ticker) => {
             const list: { name: string; args: Record<string, unknown> }[] = [
               { name: 'get_stock_quote', args: { ticker } },
-              // Always fetch recent news so the model has catalysts/context beyond the 24h
-              // price move. This is a parallel data fetch on existing tools — no extra LLM call.
+              // Always fetch recent news so the model has catalysts/context beyond the 24h price move.
               { name: 'get_company_news', args: { ticker, days: '3' } },
             ];
             if (isCompareAsk) {
               list.push({ name: 'get_company_profile', args: { ticker, include_financials: 'true' } });
+            }
+            if (isPatternAsk) {
+              list.push({ name: 'get_price_history', args: { ticker, period: '1mo' } });
             }
             return list;
           });
@@ -431,6 +434,7 @@ export async function processMessage(
         const toolResultMessage: ChatMessage = {
           role: 'user',
           content: `Tool results:\n${toolResults.join('\n\n')}\n\nSynthesize these results for the user:
+- If asked about PATTERNS or TRENDS: synthesize retrieved evidence into a pattern (Pattern → Verified Evidence Bullets → What it Suggests → Why it Matters). Use news only as supporting context. Do NOT invent volume, relative strength, or technical levels. If data is insufficient, state what evidence is missing.
 - If RICH verified news/catalysts exist (e.g. BTC): deliver full analytical depth — stat card, verified news bullets, "Why it matters" synthesis, and actionable next steps.
 - If NO verified news/catalysts exist (e.g. LTC): present the stat card, report available price/range data, state plainly that no verified news/catalyst was identified in the feed, and stop naturally. NEVER speculate on why news is absent, infer market sentiment or positioning from zero news, or give investment advice.`,
         };
