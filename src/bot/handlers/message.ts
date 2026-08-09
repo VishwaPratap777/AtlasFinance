@@ -266,18 +266,24 @@ export async function processMessage(
 
       const streamChunk = (chunkText: string) => {
         const now = Date.now();
-        if (!isEditing && now - lastEditTime > 1200 && chunkText.trim().length > 80) {
+        if (!isEditing && now - lastEditTime > 1500 && chunkText.trim().length > 80) {
           lastEditTime = now;
           isEditing = true;
           const formattedChunk = formatForTelegram(chunkText);
           streamMessagePromise = (async () => {
             try {
               if (!streamMessage) {
-                streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(() => null);
+                streamMessage = await ctx.reply(formattedChunk, { parse_mode: 'Markdown' }).catch(async () => {
+                  return await ctx.reply(formattedChunk.replace(/[*_`]/g, '')).catch(() => null);
+                });
               } else if (streamMessage?.message_id) {
                 await ctx.telegram
                   .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk, { parse_mode: 'Markdown' })
-                  .catch(() => { });
+                  .catch(async () => {
+                    await ctx.telegram
+                      .editMessageText(ctx.chat?.id, streamMessage.message_id, undefined, formattedChunk.replace(/[*_`]/g, ''))
+                      .catch(() => { });
+                  });
               }
             } finally {
               isEditing = false;
@@ -504,6 +510,7 @@ DATA INTEGRITY RULES:
 
       // Send or finalize Telegram message — ALWAYS overwrite streamMessage in-place if it exists
       if (streamMessage && streamMessage.message_id) {
+        let editedSuccess = false;
         try {
           await ctx.telegram.editMessageText(
             ctx.chat?.id,
@@ -512,14 +519,25 @@ DATA INTEGRITY RULES:
             formatted,
             { parse_mode: 'Markdown' }
           );
+          editedSuccess = true;
         } catch {
-          // If Markdown parsing fails on tricky formatting, overwrite the existing message in-place with plain text!
-          await ctx.telegram.editMessageText(
-            ctx.chat?.id,
-            streamMessage.message_id,
-            undefined,
-            formatted.replace(/[*_`]/g, '')
-          ).catch(() => { });
+          try {
+            await ctx.telegram.editMessageText(
+              ctx.chat?.id,
+              streamMessage.message_id,
+              undefined,
+              formatted.replace(/[*_`]/g, '')
+            );
+            editedSuccess = true;
+          } catch {
+            editedSuccess = false;
+          }
+        }
+        if (!editedSuccess) {
+          // Fallback: If editing streamMessage failed, send full reply so user NEVER gets cut-off text!
+          await ctx.reply(formatted, { parse_mode: 'Markdown' }).catch(() => {
+            return ctx.reply(formatted.replace(/[*_`]/g, ''));
+          });
         }
       } else {
         try {
