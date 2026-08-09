@@ -468,8 +468,9 @@ export async function processMessage(
 1. LAYER 1 — FACTUAL SNAPSHOT (MANDATORY): Always state all relevant retrieved numbers (Current price, 24h %, 30-day return, 30-day range, volume, peer comparisons, verified catalysts). Never remove numbers.
 2. LAYER 2 — EVIDENCE-BASED INTERPRETATION (CONDITIONAL): Interpret whether facts establish a pattern. Do NOT force a market regime label or section title. If evidence is inconclusive or range alone is thin, state facts cleanly and describe what cannot be established.
 3. LAYER 3 — WHY IT MATTERS (OPTIONAL): Explain market implication ONLY if Layer 2 produces a meaningful interpretation. Do NOT manufacture dramatic implications.
-4. NUMERICAL VERIFICATION: Double-check every comparative statement against actual numbers before outputting (NEVER say "outperformed both" if any peer has a higher return).
-5. CAUSALITY & NEWS: Silently ignore irrelevant retrieved news (e.g. general S&P news during a BNB query). Only link catalysts when evidence proves causation.`,
+4. NUMERICAL VERIFICATION — SIGNED NUMBERS: Verify every comparative statement against actual numbers WITH SIGNS before outputting. A positive return is ALWAYS greater than a negative return. NEVER say a positive-return asset "lags" a negative-return asset. Example: ETH +10.2% is ahead of SOL -5.8%, not behind it.
+5. CAUSALITY & NEWS: Silently ignore irrelevant retrieved news (e.g. general S&P news during a BNB query). Only link catalysts when evidence proves causation.
+6. TOOL ERRORS ARE INTERNAL: NEVER mention tool names, tool errors, or API failures in the response. If a data point is missing due to a tool error, simply omit it or say the data is unavailable — no technical explanation.`,
         };
 
         messages = [...messages, assistantWithTools, toolResultMessage];

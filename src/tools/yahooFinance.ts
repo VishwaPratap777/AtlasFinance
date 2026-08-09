@@ -63,8 +63,11 @@ export async function fetchYahooChartV8(symbol: string): Promise<QuickSummary | 
 
 export async function quickLookup(ticker: string): Promise<QuickSummary> {
   let symbol = ticker.toUpperCase().trim();
-  if (KNOWN_CRYPTO.has(symbol)) {
-    symbol = `${symbol}-USD`;
+  // Normalise crypto to base-USD form without double-suffixing.
+  // Strip any existing -USD or USD suffix first, then re-add cleanly.
+  const cryptoBase = symbol.replace(/-USD$/i, '').replace(/USD$/i, '');
+  if (KNOWN_CRYPTO.has(symbol) || KNOWN_CRYPTO.has(cryptoBase)) {
+    symbol = `${cryptoBase}-USD`;
   }
 
   // If symbol is an index (starts with ^ like ^BSESN, ^NSEI), try Yahoo Chart V8 API first
@@ -106,7 +109,8 @@ export async function getHistoricalReturn(
   period: '1mo' | '3mo' | '6mo' | '1y' | '2y' = '1y'
 ): Promise<string> {
   let symbol = ticker.toUpperCase().trim();
-  const baseCrypto = symbol.replace('-USD', '').replace(/USD$/, '');
+  // Strip any existing -USD / USD suffix before normalising to avoid double-suffixing.
+  const baseCrypto = symbol.replace(/-USD$/i, '').replace(/USD$/i, '');
   if (KNOWN_CRYPTO.has(symbol) || KNOWN_CRYPTO.has(baseCrypto)) {
     symbol = `${baseCrypto}-USD`;
   }
